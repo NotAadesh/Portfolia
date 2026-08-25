@@ -17,6 +17,7 @@ from app.api.v1.portfolio import router as portfolio_router
 from app.api.v1.simulation import router as simulation_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.ai import router as ai_router
+from app.api.v1.lifecycle import router as lifecycle_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,9 +89,11 @@ app.include_router(stocks_router, prefix=settings.API_V1_STR, tags=["Stocks"])
 app.include_router(portfolio_router, prefix=settings.API_V1_STR, tags=["Portfolios"])
 app.include_router(simulation_router, prefix=settings.API_V1_STR, tags=["Simulations"])
 app.include_router(ai_router, prefix=settings.API_V1_STR, tags=["AI Intelligence"])
+app.include_router(lifecycle_router, prefix=settings.API_V1_STR, tags=["Lifecycle"])
 
 # Mount Legacy Root Routes for backwards compatibility with existing frontend calls
 app.include_router(stocks_router, tags=["Legacy"])
 app.include_router(portfolio_router, tags=["Legacy"])
 app.include_router(simulation_router, tags=["Legacy"])
 app.include_router(ai_router, tags=["Legacy"])
+app.include_router(lifecycle_router, tags=["Legacy"])

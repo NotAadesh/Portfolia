@@ -10,11 +10,16 @@ function SidebarContent() {
   const { user, logout, isLoading } = useAuth();
 
   const navItems = [
-    { label: "Overview", href: "/" },
-    { label: "Financial Analysis", href: "/analysis" },
-    { label: "Portfolio Maker", href: "/portfolio" },
-    { label: "My Portfolios", href: "/my-portfolios" },
-    { label: "Monte Carlo Simulation", href: "/simulation" },
+    { label: "Overview", href: "/", badge: "" },
+    { label: "Goal Onboarding", href: "/onboarding", badge: "NEW" },
+    { label: "Import Demat", href: "/import", badge: "FAST" },
+    { label: "Financial Analysis", href: "/analysis", badge: "" },
+    { label: "Portfolio Maker", href: "/portfolio", badge: "" },
+    { label: "Monte Carlo Sim", href: "/simulation", badge: "" },
+    { label: "Multi-Compare", href: "/compare", badge: "PEER" },
+    { label: "Tax Rebalance", href: "/rebalance", badge: "TAX" },
+    { label: "Broker Execution", href: "/execute", badge: "AUTO" },
+    { label: "My Portfolios", href: "/my-portfolios", badge: "" },
   ];
 
   return (
@@ -104,11 +109,29 @@ function SidebarContent() {
                   justifyContent: "space-between",
                 }}
               >
-                <span>{item.label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>{item.label}</span>
+                  {item.badge && (
+                    <span
+                      style={{
+                        fontSize: "8px",
+                        fontWeight: "700",
+                        color: item.badge === "NEW" ? "#38bdf8" : item.badge === "FAST" ? "#34d399" : "#fbbf24",
+                        backgroundColor: "rgba(255, 255, 255, 0.08)",
+                        padding: "1px 4px",
+                        borderRadius: "3px",
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
                 {!user &&
                   (item.href === "/portfolio" ||
                     item.href === "/simulation" ||
-                    item.href === "/my-portfolios") && (
+                    item.href === "/my-portfolios" ||
+                    item.href === "/rebalance" ||
+                    item.href === "/execute") && (
                     <span
                       style={{
                         fontSize: "9px",
