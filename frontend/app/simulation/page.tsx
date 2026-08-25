@@ -231,6 +231,52 @@ export default function Simulation() {
       ]}
     >
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {/* 🗺️ COHESIVE 4-STAGE LIFECYCLE WORKFLOW STEPPER */}
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
+            <Link
+              href="/onboarding"
+              className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-slate-400">Step 1</span>
+                <span className="text-[10px] text-blue-600 font-semibold">Change Goal</span>
+              </div>
+              <span className="font-bold text-slate-800 mt-1">🎯 Goal & Demat Basket</span>
+            </Link>
+
+            <Link
+              href="/portfolio"
+              className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-slate-400">Step 2</span>
+                <span className="text-[10px] text-blue-600 font-semibold">Adjust Weights</span>
+              </div>
+              <span className="font-bold text-slate-800 mt-1">📊 Markowitz MPT Optimizer</span>
+            </Link>
+
+            <div className="p-3 rounded-lg bg-slate-900 text-white shadow-sm flex flex-col justify-between">
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-blue-400">Step 3 • Active Hub</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <span className="font-bold text-white mt-1">🎲 Monte Carlo Stress Test</span>
+            </div>
+
+            <Link
+              href="/rebalance"
+              className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-slate-400">Step 4</span>
+                <span className="text-[10px] text-slate-500 font-medium">Final Stage</span>
+              </div>
+              <span className="font-bold text-slate-800 mt-1">⚖️ Tax Rebalance & Orders</span>
+            </Link>
+          </div>
+        </div>
+
         {/* Header with Beginner Guide Toggle */}
         <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <div>
@@ -240,12 +286,21 @@ export default function Simulation() {
             </p>
           </div>
 
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
-          >
-            <span>{showGuide ? "Hide Beginner Guide" : "📖 How to Read This Simulation"}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/compare"
+              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors"
+            >
+              👥 Compare with Peers
+            </Link>
+
+            <button
+              onClick={() => setShowGuide(!showGuide)}
+              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <span>{showGuide ? "Hide Beginner Guide" : "📖 How to Read This Simulation"}</span>
+            </button>
+          </div>
         </div>
 
         {/* Beginner Guide Card (Collapsible) */}
@@ -620,6 +675,33 @@ export default function Simulation() {
                 </div>
               </div>
             )}
+
+            {/* 🚀 GUIDED NEXT STEP ACTION BAR */}
+            <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800 flex flex-wrap justify-between items-center gap-4">
+              <div>
+                <span className="text-[10px] font-bold bg-emerald-500 text-slate-950 px-2 py-0.5 rounded uppercase">Step 3 Complete</span>
+                <h4 className="text-sm font-bold text-white mt-1">Ready to optimize taxes & execute your portfolio?</h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Calculate Union Budget 2024 STCG/LTCG liabilities and generate 1-click Zerodha Kite order baskets.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/portfolio"
+                  className="text-xs text-slate-300 hover:text-white px-3 py-2"
+                >
+                  ← Back to MPT Optimizer
+                </Link>
+
+                <Link
+                  href="/rebalance"
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-6 py-2.5 rounded-lg transition-colors shadow-sm"
+                >
+                  ⚖️ Proceed to Step 4: Tax Rebalance & Execution →
+                </Link>
+              </div>
+            </div>
           </div>
         )}
       </div>

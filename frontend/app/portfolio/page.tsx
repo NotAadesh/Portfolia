@@ -208,21 +208,74 @@ export default function Portfolio() {
       ]}
     >
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {/* 🗺️ COHESIVE 4-STAGE LIFECYCLE WORKFLOW STEPPER */}
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
+            <Link
+              href="/onboarding"
+              className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-slate-400">Step 1</span>
+                <span className="text-[10px] text-blue-600 font-semibold">Change Goal</span>
+              </div>
+              <span className="font-bold text-slate-800 mt-1">🎯 Goal & Demat Basket</span>
+            </Link>
+
+            <div className="p-3 rounded-lg bg-slate-900 text-white shadow-sm flex flex-col justify-between">
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-blue-400">Step 2 • Active Hub</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <span className="font-bold text-white mt-1">📊 Markowitz MPT Optimizer</span>
+            </div>
+
+            <Link
+              href="/simulation"
+              className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-slate-400">Step 3</span>
+                <span className="text-[10px] text-slate-500 font-medium">Next Stage</span>
+              </div>
+              <span className="font-bold text-slate-800 mt-1">🎲 Monte Carlo Stress Test</span>
+            </Link>
+
+            <Link
+              href="/rebalance"
+              className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold uppercase text-slate-400">Step 4</span>
+                <span className="text-[10px] text-slate-500 font-medium">Final Stage</span>
+              </div>
+              <span className="font-bold text-slate-800 mt-1">⚖️ Tax Rebalance & Orders</span>
+            </Link>
+          </div>
+        </div>
+
         {/* Header with Guide Toggle */}
         <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Portfolio Maker & Optimizer</h1>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Portfolio Studio & MPT Optimizer</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Markowitz Modern Portfolio Theory (MPT) asset allocation with SLSQP optimization
+              Markowitz Modern Portfolio Theory (MPT) asset allocation with SLSQP numerical solver
             </p>
           </div>
 
           <div className="flex items-center gap-2">
+            <Link
+              href="/import"
+              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <span>📥 Import Demat Holdings</span>
+            </Link>
+
             <button
               onClick={() => setShowGuide(!showGuide)}
               className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
             >
-              <span>{showGuide ? "Hide Guide" : "📖 How to Use Portfolio Maker"}</span>
+              <span>{showGuide ? "Hide Guide" : "📖 How to Use Studio"}</span>
             </button>
 
             {user && (
@@ -423,19 +476,27 @@ export default function Portfolio() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex justify-between items-center bg-slate-50 border border-slate-200 p-4 rounded-xl">
+            <div className="flex flex-wrap justify-between items-center bg-slate-50 border border-slate-200 p-5 rounded-xl gap-4">
               <div>
-                <p className="font-semibold text-slate-900 text-xs uppercase tracking-wider">Portfolio Actions</p>
-                <p className="text-slate-600 text-xs mt-0.5">Persist this asset allocation to your account or run stress testing.</p>
+                <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded uppercase">Next Stages</span>
+                <h4 className="font-bold text-slate-900 text-sm mt-1">Ready to test risk & execute this allocation?</h4>
+                <p className="text-slate-500 text-xs mt-0.5">Seamlessly carry these optimal weights into stochastic stress testing or tax rebalancing.</p>
               </div>
 
-              <div className="flex gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   onClick={handleOpenSaveModal}
-                  className="bg-white text-slate-800 border border-slate-300 px-4 py-2 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors"
+                  className="bg-white text-slate-800 border border-slate-300 px-3.5 py-2 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors"
                 >
-                  Save Portfolio
+                  Save to Cloud
                 </button>
+
+                <Link
+                  href="/compare"
+                  className="bg-white text-slate-800 border border-slate-300 px-3.5 py-2 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  👥 Compare vs. Peers
+                </Link>
 
                 <button
                   onClick={() => {
@@ -452,10 +513,17 @@ export default function Portfolio() {
                     );
                     router.push("/simulation");
                   }}
-                  className="bg-slate-900 text-white px-5 py-2 rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-sm"
                 >
-                  Run Monte Carlo Simulation
+                  🎲 Step 3: Stress Test →
                 </button>
+
+                <Link
+                  href="/rebalance"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-sm"
+                >
+                  ⚖️ Step 4: Tax Rebalance →
+                </Link>
               </div>
             </div>
 

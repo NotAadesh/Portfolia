@@ -83,7 +83,68 @@ export default function Home() {
   const filteredData = getFilteredData();
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* 🚀 BEGINNER-FRIENDLY QUICK LAUNCH CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Pathway 1: Build Goal Portfolio */}
+        <div
+          onClick={() => router.push("/onboarding")}
+          className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl border border-slate-700 shadow-md cursor-pointer hover:border-blue-500 transition-all flex flex-col justify-between space-y-4 group"
+        >
+          <div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded uppercase tracking-wider">
+                Guided Wizard
+              </span>
+              <span className="text-blue-400 text-xs font-bold group-hover:translate-x-1 transition-transform">
+                Start Goal →
+              </span>
+            </div>
+            <h2 className="text-lg font-bold text-white mt-2">🎯 Build a Goal-Driven Portfolio</h2>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              Define a financial target (e.g. ₹25 Lakhs) and automatically generate 3 optimal Markowitz baseline portfolios matching your risk tolerance.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-700/60 text-[11px] text-slate-400">
+            <span>✨ 3-Step Wizard</span>
+            <span>•</span>
+            <span>📈 Lumpsum / SIP</span>
+            <span>•</span>
+            <span>🎲 Goal Probability</span>
+          </div>
+        </div>
+
+        {/* Pathway 2: Import Existing Demat Holdings */}
+        <div
+          onClick={() => router.push("/import")}
+          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-slate-800 transition-all flex flex-col justify-between space-y-4 group"
+        >
+          <div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase tracking-wider">
+                Frictionless Import
+              </span>
+              <span className="text-slate-900 text-xs font-bold group-hover:translate-x-1 transition-transform">
+                Import Demat →
+              </span>
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 mt-2">📥 Import & Optimize Existing Holdings</h2>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Zero file downloads. Copy-paste your holdings screen directly from Zerodha Kite, Groww, or AngelOne to run instant tax-loss and risk checks.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 font-medium">
+            <span>📋 Clipboard Paste</span>
+            <span>•</span>
+            <span>⚖️ 2024 Tax Optimizer</span>
+            <span>•</span>
+            <span>⚡ 1-Click Kite Basket</span>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
