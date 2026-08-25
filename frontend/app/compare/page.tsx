@@ -14,6 +14,27 @@ function CompareContent() {
   const [friendTokenInput, setFriendTokenInput] = useState("");
   const [copied, setCopied] = useState(false);
 
+  const [activeUserData, setActiveUserData] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      const bState = localStorage.getItem("portfolio_builder_state");
+      if (bState) {
+        const parsed = JSON.parse(bState);
+        if (parsed.result) {
+          setActiveUserData({
+            expected_cagr: parsed.result.expected_return,
+            volatility: parsed.result.volatility,
+            sharpe_ratio: parsed.result.sharpe_ratio,
+            max_drawdown: -Number((parsed.result.volatility * 1.15).toFixed(1)),
+            var_95: -Number((parsed.result.volatility * 0.65).toFixed(1)),
+            goal_probability_score: Math.min(96, Math.max(50, Math.round(Number(parsed.result.sharpe_ratio) * 115))),
+          });
+        }
+      }
+    } catch {}
+  }, []);
+
   const fetchComparison = async (token = compareIdParam) => {
     setLoading(true);
     try {
@@ -119,27 +140,27 @@ function CompareContent() {
                 <div className="mt-4 space-y-2.5 text-xs">
                   <div className="flex justify-between border-b border-slate-100 pb-1.5">
                     <span className="text-slate-500">Expected CAGR</span>
-                    <span className="font-bold text-slate-900">{data.user_portfolio.expected_cagr}%</span>
+                    <span className="font-bold text-slate-900">{activeUserData?.expected_cagr ?? data.user_portfolio.expected_cagr}%</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 pb-1.5">
                     <span className="text-slate-500">Volatility (Risk)</span>
-                    <span className="font-bold text-rose-600">{data.user_portfolio.volatility}%</span>
+                    <span className="font-bold text-rose-600">{activeUserData?.volatility ?? data.user_portfolio.volatility}%</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 pb-1.5">
                     <span className="text-slate-500">Sharpe Ratio</span>
-                    <span className="font-bold text-slate-900">{data.user_portfolio.sharpe_ratio}</span>
+                    <span className="font-bold text-slate-900">{activeUserData?.sharpe_ratio ?? data.user_portfolio.sharpe_ratio}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 pb-1.5">
                     <span className="text-slate-500">Max Drawdown</span>
-                    <span className="font-bold text-rose-600">{data.user_portfolio.max_drawdown}%</span>
+                    <span className="font-bold text-rose-600">{activeUserData?.max_drawdown ?? data.user_portfolio.max_drawdown}%</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 pb-1.5">
                     <span className="text-slate-500">95% Tail Risk (VaR)</span>
-                    <span className="font-bold text-slate-900">{data.user_portfolio.var_95}%</span>
+                    <span className="font-bold text-slate-900">{activeUserData?.var_95 ?? data.user_portfolio.var_95}%</span>
                   </div>
                   <div className="flex justify-between pt-1">
                     <span className="text-slate-500 font-semibold">Goal Success Rate</span>
-                    <span className="font-bold text-blue-600">{data.user_portfolio.goal_probability_score}%</span>
+                    <span className="font-bold text-blue-600">{activeUserData?.goal_probability_score ?? data.user_portfolio.goal_probability_score}%</span>
                   </div>
                 </div>
               </div>

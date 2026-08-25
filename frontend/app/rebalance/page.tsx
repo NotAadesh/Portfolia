@@ -51,9 +51,25 @@ export default function TaxRebalancePage() {
   const runTaxOptimizer = async () => {
     setLoading(true);
     let storedHoldings = defaultHoldings;
+    let targetWeights = defaultTargetWeights;
+
     try {
       const raw = localStorage.getItem("imported_holdings");
       if (raw) storedHoldings = JSON.parse(raw);
+    } catch {}
+
+    try {
+      const bState = localStorage.getItem("portfolio_builder_state");
+      if (bState) {
+        const parsedB = JSON.parse(bState);
+        if (parsedB.result?.optimal_weights) {
+          const mapped: any = {};
+          Object.entries(parsedB.result.optimal_weights).forEach(([t, w]: any) => {
+            mapped[t] = Number(w) / 100;
+          });
+          targetWeights = mapped;
+        }
+      }
     } catch {}
 
     const totalVal = storedHoldings.reduce((sum: number, h: any) => sum + (h.current_value || 0), 0) || 273650;
@@ -64,7 +80,7 @@ export default function TaxRebalancePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           holdings: storedHoldings,
-          target_weights: defaultTargetWeights,
+          target_weights: targetWeights,
           total_portfolio_value: totalVal,
         }),
       });

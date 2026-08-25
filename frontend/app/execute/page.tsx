@@ -39,10 +39,30 @@ export default function BrokerExecutionPage() {
     setLoading(true);
 
     let orders = defaultOrders;
+    let activeHoldings = defaultHoldings;
+    let targetWeights = defaultTargetWeights;
+
     try {
-      const stored = localStorage.getItem("rebalance_orders");
-      if (stored) orders = JSON.parse(stored);
-    } catch {}
+      const storedOrders = localStorage.getItem("rebalance_orders");
+      if (storedOrders) orders = JSON.parse(storedOrders);
+
+      const storedHoldings = localStorage.getItem("imported_holdings");
+      if (storedHoldings) activeHoldings = JSON.parse(storedHoldings);
+
+      const bState = localStorage.getItem("portfolio_builder_state");
+      if (bState) {
+        const parsedB = JSON.parse(bState);
+        if (parsedB.result?.optimal_weights) {
+          const mapped: any = {};
+          Object.entries(parsedB.result.optimal_weights).forEach(([t, w]: any) => {
+            mapped[t] = Number(w) / 100;
+          });
+          targetWeights = mapped;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     try {
       // 1. Generate Broker Baskets
@@ -59,8 +79,8 @@ export default function BrokerExecutionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          holdings: defaultHoldings,
-          target_weights: defaultTargetWeights,
+          holdings: activeHoldings,
+          target_weights: targetWeights,
           threshold: 0.05,
         }),
       });

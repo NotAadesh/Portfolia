@@ -45,14 +45,65 @@ export default function Portfolio() {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("portfolio_builder_state");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.selected) setSelected(parsed.selected);
-      if (parsed.investment) setInvestment(parsed.investment);
-      if (parsed.years) setYears(parsed.years);
-      if (parsed.result) setResult(parsed.result);
-      if (parsed.aiInsights) setAiInsights(parsed.aiInsights);
+    // 1. Check if user arrived from Goal Onboarding or Importer with portfolio_data
+    const goalData = localStorage.getItem("portfolio_data");
+    const importedHoldings = localStorage.getItem("imported_holdings");
+    const builderState = localStorage.getItem("portfolio_builder_state");
+
+    if (goalData) {
+      try {
+        const parsed = JSON.parse(goalData);
+        if (parsed.investment) setInvestment(parsed.investment);
+        if (parsed.years) setYears(parsed.years);
+
+        if (parsed.tickers && parsed.tickers.length > 0) {
+          const mappedCompanies = parsed.tickers.map((t: string) => {
+            const cleanName = t.replace(".NS", "");
+            return { ticker: t, name: cleanName };
+          });
+          setSelected(mappedCompanies);
+
+          // Auto-optimize this basket
+          setTimeout(() => {
+            analyzePortfolio(mappedCompanies);
+          }, 300);
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    if (importedHoldings) {
+      try {
+        const parsed = JSON.parse(importedHoldings);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const mapped = parsed.map((h: any) => ({
+            ticker: h.ticker,
+            name: h.company_name || h.ticker.replace(".NS", ""),
+          }));
+          setSelected(mapped);
+          setTimeout(() => {
+            analyzePortfolio(mapped);
+          }, 300);
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    if (builderState) {
+      try {
+        const parsed = JSON.parse(builderState);
+        if (parsed.selected) setSelected(parsed.selected);
+        if (parsed.investment) setInvestment(parsed.investment);
+        if (parsed.years) setYears(parsed.years);
+        if (parsed.result) setResult(parsed.result);
+        if (parsed.aiInsights) setAiInsights(parsed.aiInsights);
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, []);
 
