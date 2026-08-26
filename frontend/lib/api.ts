@@ -1,4 +1,15 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+  // If running in browser on a production domain (Vercel, custom domain)
+  if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
+    return "https://portfolia-backend-qntq.onrender.com";
+  }
+  return "http://127.0.0.1:8000";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export async function apiFetch<T = any>(
   endpoint: string,
@@ -15,9 +26,10 @@ export async function apiFetch<T = any>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  const activeBaseUrl = getApiBaseUrl();
   const url = endpoint.startsWith("http")
     ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+    : `${activeBaseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
   const response = await fetch(url, {
     ...options,
