@@ -76,13 +76,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         body: JSON.stringify({ email, password, full_name: fullName }),
       });
-      if (res.preview_otp && typeof window !== "undefined") {
-        sessionStorage.setItem("last_preview_otp", res.preview_otp);
+      const previewOtp = res?.preview_otp;
+      if (previewOtp && typeof window !== "undefined") {
+        sessionStorage.setItem("last_preview_otp", previewOtp);
       }
       return {
-        requiresVerification: res.requires_verification,
-        email: res.email,
-        previewOtp: res.preview_otp,
+        requiresVerification: Boolean(res?.requires_verification ?? true),
+        email: res?.email || email,
+        previewOtp,
       };
     } finally {
       setIsLoading(false);
