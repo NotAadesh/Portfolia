@@ -67,17 +67,22 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     db.commit()
 
     # Send verification email
-    send_otp_verification_email(
+    sent_success = send_otp_verification_email(
         to_email=user.email,
         otp_code=otp,
         full_name=user.full_name or ""
     )
 
-    return {
+    resp = {
         "message": "Account created. Please verify your email with the 6-digit code sent to your inbox.",
         "email": user.email,
-        "requires_verification": True
+        "requires_verification": True,
     }
+    if not sent_success:
+        resp["preview_otp"] = otp
+        resp["notice"] = f"Verification Code: {otp}"
+
+    return resp
 
 
 @router.post("/verify-otp", response_model=Token)
@@ -147,13 +152,18 @@ def resend_otp(data: ResendOtpRequest, db: Session = Depends(get_db)):
     db.add(verification)
     db.commit()
 
-    send_otp_verification_email(
+    sent_success = send_otp_verification_email(
         to_email=user.email,
         otp_code=otp,
         full_name=user.full_name or ""
     )
 
-    return {"message": "A new verification code has been sent to your email."}
+    resp = {"message": "A new verification code has been sent to your email."}
+    if not sent_success:
+        resp["preview_otp"] = otp
+        resp["notice"] = f"Verification Code: {otp}"
+
+    return resp
 
 
 @router.post("/login", response_model=Token)

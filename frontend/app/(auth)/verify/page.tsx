@@ -18,6 +18,18 @@ function VerifyContent() {
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(60);
 
+  const [previewOtp, setPreviewOtp] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("last_preview_otp");
+      if (stored) {
+        setPreviewOtp(stored);
+        if (!otpCode) setOtpCode(stored);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let timer: any;
     if (countdown > 0) {
@@ -52,7 +64,11 @@ function VerifyContent() {
     setResending(true);
     setError("");
     try {
-      await resendOtp(email);
+      const res: any = await resendOtp(email);
+      if (res?.preview_otp) {
+        setPreviewOtp(res.preview_otp);
+        setOtpCode(res.preview_otp);
+      }
       setMessage("A fresh verification code has been dispatched.");
       setCountdown(60);
     } catch (err: any) {
@@ -66,15 +82,32 @@ function VerifyContent() {
     <div className="min-h-[80vh] flex items-center justify-center">
       <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 w-full max-w-sm space-y-6">
         <div className="text-center space-y-1.5">
-          <div className="inline-flex w-8 h-8 bg-slate-900 text-white rounded-md items-center justify-center font-bold text-xs mb-1">
-            P
-          </div>
+          <img
+            src="/logo.png"
+            alt="Portfolia Logo"
+            style={{ width: "48px", height: "48px" }}
+            className="w-12 h-12 rounded-xl object-cover shadow-sm mx-auto mb-1 border border-slate-100"
+          />
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Verify Account</h1>
           <p className="text-xs text-slate-500">
             Enter the 6-digit passcode sent to
           </p>
           <p className="font-semibold text-slate-800 text-xs font-mono">{email || "your email"}</p>
         </div>
+
+        {previewOtp && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-center animate-in fade-in duration-200">
+            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider block">
+              Auto-Detected Verification Code
+            </span>
+            <div className="text-xl font-bold font-mono tracking-widest text-blue-700 mt-1">
+              {previewOtp}
+            </div>
+            <p className="text-[10px] text-blue-600 mt-1">
+              Auto-filled below for instant 1-click account verification.
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg">

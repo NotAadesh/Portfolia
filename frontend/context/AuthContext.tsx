@@ -72,13 +72,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signup = async (email: string, password: string, fullName?: string) => {
     setIsLoading(true);
     try {
-      const res = await apiFetch<{ message: string; email: string; requires_verification: boolean }>("/api/v1/auth/signup", {
+      const res = await apiFetch<{ message: string; email: string; requires_verification: boolean; preview_otp?: string }>("/api/v1/auth/signup", {
         method: "POST",
         body: JSON.stringify({ email, password, full_name: fullName }),
       });
+      if (res.preview_otp && typeof window !== "undefined") {
+        sessionStorage.setItem("last_preview_otp", res.preview_otp);
+      }
       return {
         requiresVerification: res.requires_verification,
         email: res.email,
+        previewOtp: res.preview_otp,
       };
     } finally {
       setIsLoading(false);
@@ -95,16 +99,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("financial_ai_token", res.access_token);
       setToken(res.access_token);
       setUser(res.user);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("last_preview_otp");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const resendOtp = async (email: string) => {
-    await apiFetch("/api/v1/auth/resend-otp", {
+    const res = await apiFetch<{ message: string; preview_otp?: string }>("/api/v1/auth/resend-otp", {
       method: "POST",
       body: JSON.stringify({ email }),
     });
+    if (res?.preview_otp && typeof window !== "undefined") {
+      sessionStorage.setItem("last_preview_otp", res.preview_otp);
+    }
+    return res;
   };
 
   const logout = () => {
