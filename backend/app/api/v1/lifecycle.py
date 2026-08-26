@@ -221,13 +221,21 @@ def get_multi_comparison(
             "assets_count": len(shared_portfolio.assets)
         }
 
-    return {
+    comp_data = {
         "user_portfolio": user_portfolio,
         "ai_optimal": ai_optimal,
         "nifty_50_benchmark": nifty_50,
         "peer_portfolio": peer_portfolio,
         "share_url": f"/compare?compare_id={shared_portfolio.share_token if shared_portfolio else 'sample-friend-token'}"
     }
+
+    try:
+        from app.services.ai_intelligence import generate_gemini_comparison_verdict
+        comp_data["ai_verdict"] = generate_gemini_comparison_verdict(comp_data)
+    except Exception as e:
+        print(f"Comparison AI verdict error: {e}")
+
+    return comp_data
 
 
 # --- Step 4: Indian Tax & Exit-Load Optimizer ---
@@ -253,6 +261,34 @@ def create_broker_execution_basket(req: BrokerBasketRequest):
     return generate_broker_order_baskets(req.orders)
 
 
+class DirectExecutionRequest(BaseModel):
+    orders: List[Dict[str, Any]]
+    broker_mode: Optional[str] = "PAPER_SIMULATION"
+
+
+@router.post("/execute/direct-order")
+def place_direct_orders(req: DirectExecutionRequest):
+    """
+    Directly executes rebalance orders with instant receipt confirmation, fill timestamps, and STT computation.
+    """
+    from app.services.lifecycle_service import execute_direct_orders
+    return execute_direct_orders(req.orders, req.broker_mode)
+
+
+class SentinelScanRequest(BaseModel):
+    holdings: List[Dict[str, Any]]
+    target_weights: Dict[str, float]
+
+
+@router.post("/sentinel/scan")
+def run_realtime_sentinel_scan(req: SentinelScanRequest):
+    """
+    Performs real-time every-minute health audit of portfolio constituents, drift, and stock change alerts.
+    """
+    from app.services.lifecycle_service import run_every_minute_sentinel
+    return run_every_minute_sentinel(req.holdings, req.target_weights)
+
+
 @router.post("/drift-check")
 def check_portfolio_drift_endpoint(
     holdings: List[Dict[str, Any]],
@@ -263,3 +299,4 @@ def check_portfolio_drift_endpoint(
     Evaluates current holdings against target weights to trigger weekly drift alerts (>5%).
     """
     return detect_portfolio_drift(holdings, target_weights, threshold=threshold)
+

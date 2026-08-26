@@ -168,3 +168,43 @@ def chat_with_copilot(request: CopilotChatRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Copilot chat failed: {str(e)}")
+
+
+class StockRecommendationRequest(BaseModel):
+    current_tickers: List[str]
+    goal_type: Optional[str] = "Growth"
+    horizon_years: Optional[int] = 3
+
+
+@router.post("/recommend-stocks")
+def recommend_stocks_for_portfolio(request: StockRecommendationRequest):
+    """
+    Suggests high-conviction, non-overlapping Indian equities to plug diversification gaps using Google Gemini.
+    """
+    from app.services.ai_intelligence import generate_gemini_stock_recommendations
+    try:
+        return generate_gemini_stock_recommendations(
+            current_tickers=request.current_tickers,
+            goal_type=request.goal_type,
+            horizon_years=request.horizon_years
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stock recommendations failed: {str(e)}")
+
+
+class ComparePortfoliosRequest(BaseModel):
+    portfolios: List[Dict[str, Any]]
+
+
+@router.post("/compare-portfolios")
+def compare_portfolios_ai(request: ComparePortfoliosRequest):
+    """
+    Generates side-by-side comparative analysis, rankings, and macro scenario insights for up to 4 portfolios using Google Gemini.
+    """
+    from app.services.ai_intelligence import generate_gemini_compare_portfolios
+    try:
+        return generate_gemini_compare_portfolios(request.portfolios)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Portfolio comparison failed: {str(e)}")
+
+

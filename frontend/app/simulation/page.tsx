@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import MonteCarloCharts from "@/components/MonteCarloCharts";
 import AuthTeaserGate from "@/components/AuthTeaserGate";
 import AISimulationInsights, { SimulationInsightsData } from "@/components/AISimulationInsights";
@@ -9,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
 
 export default function Simulation() {
+  const router = useRouter();
   const { user } = useAuth();
 
   const [amount, setAmount] = useState(100000);
@@ -219,6 +221,198 @@ export default function Simulation() {
     runSimulation(basket.tickers);
   };
 
+  const [showSimOrderModal, setShowSimOrderModal] = useState(false);
+  const [stagedSimOrders, setStagedSimOrders] = useState<any[]>([]);
+
+  const handleDeploySimulatedOrders = async () => {
+    if (!tickers || tickers.length === 0) return;
+
+    const totalCap = Number(amount) || 100000;
+    let priceMap: Record<string, number> = {
+      "RELIANCE.NS": 2980,
+      "TCS.NS": 4150,
+      "HDFCBANK.NS": 1640,
+      "ICICIBANK.NS": 1210,
+      "INFY.NS": 1820,
+      "LT.NS": 3620,
+      "TATAMOTORS.NS": 980,
+      "SUNPHARMA.NS": 1710,
+      "BHARTIARTL.NS": 1480,
+      "BAJFINANCE.NS": 7120,
+      "TITAN.NS": 3450,
+      "ITC.NS": 490,
+      "SBIN.NS": 815,
+      "TATASTEEL.NS": 155,
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/stocks/quotes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers }),
+      });
+      if (res.ok) {
+        const quotes = await res.json();
+        if (quotes && typeof quotes === "object") {
+          Object.entries(quotes).forEach(([t, q]: any) => {
+            if (q && q.current_price) {
+              priceMap[t] = Number(q.current_price);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Live quote fetch for sim staging fallback:", e);
+    }
+
+    setCachedSimPriceMap(priceMap);
+    setSimWeightMode("OPTIMAL");
+
+    const equalWeight = 1.0 / tickers.length;
+    const staged: any[] = [];
+
+    tickers.forEach((ticker) => {
+      const alloc = Math.round(totalCap * equalWeight);
+      const ltp = priceMap[ticker] || 1500;
+      const qty = Math.max(1, Math.floor(alloc / ltp));
+      const companyName = ticker.replace(".NS", "");
+
+      staged.push({
+        ticker,
+        company_name: companyName,
+        action: "BUY",
+        quantity: qty,
+        price: ltp,
+        weight_pct: Math.round(equalWeight * 100),
+      });
+    });
+
+    setStagedSimOrders(staged);
+    setShowSimOrderModal(true);
+  };
+
+  const handleConfirmSimOrders = () => {
+    const now = new Date();
+    const formattedTime = now.toISOString().replace("T", " ").substring(0, 19);
+
+    const newOrders: any[] = [];
+    const newPositions: any[] = [];
+
+    stagedSimOrders.forEach((o) => {
+      const actualVal = Math.round(o.quantity * o.price * 100) / 100;
+      const brokerage = Math.min(20, Math.round(actualVal * 0.0003 * 100) / 100);
+      const stt = Math.round(actualVal * 0.001 * 100) / 100;
+      const orderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+
+      newOrders.push({
+        order_id: orderId,
+        ticker: o.ticker,
+        company_name: o.company_name,
+        action: o.action,
+        quantity: Number(o.quantity),
+        executed_price: Number(o.price),
+        order_value: actualVal,
+        brokerage,
+        stt,
+        status: "FILLED",
+        execution_time: formattedTime,
+        broker_mode: "SIMULATION_CONFIRMED",
+      });
+
+      newPositions.push({
+        ticker: o.ticker,
+        company_name: o.company_name,
+        quantity: Number(o.quantity),
+        avg_buy_price: Number(o.price),
+        current_price: Number(o.price),
+        invested_amount: actualVal,
+        current_value: actualVal,
+        unrealized_pnl: 0,
+        unrealized_pnl_pct: 0,
+        day_change_pct: 0.85,
+      });
+    });
+
+    try {
+      const userOrdersKey = `user_${user?.id || "guest"}_order_history`;
+      const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
+
+      const existingOrders = JSON.parse(localStorage.getItem(userOrdersKey) || "[]");
+      localStorage.setItem(userOrdersKey, JSON.stringify([...newOrders, ...existingOrders]));
+
+      const existingPositions = JSON.parse(localStorage.getItem(userPositionsKey) || "[]");
+      const mergedMap = new Map<string, any>();
+      existingPositions.forEach((p: any) => mergedMap.set(p.ticker, p));
+
+      newPositions.forEach((p: any) => {
+        if (mergedMap.has(p.ticker)) {
+          const prev = mergedMap.get(p.ticker);
+          const newQty = prev.quantity + p.quantity;
+          const newInvested = prev.invested_amount + p.invested_amount;
+          const newAvgPrice = Math.round((newInvested / newQty) * 100) / 100;
+          mergedMap.set(p.ticker, {
+            ...prev,
+            quantity: newQty,
+            invested_amount: newInvested,
+            avg_buy_price: newAvgPrice,
+            current_value: newQty * p.current_price,
+          });
+        } else {
+          mergedMap.set(p.ticker, p);
+        }
+      });
+
+      localStorage.setItem(userPositionsKey, JSON.stringify(Array.from(mergedMap.values())));
+
+      // Automatically save simulated executed portfolio into Saved Portfolios
+      try {
+        const savedStorageKey = user ? `saved_user_portfolios_${user.id}` : "saved_user_portfolios_guest";
+        const localSaved = JSON.parse(localStorage.getItem(savedStorageKey) || "[]");
+        const simPortfolio = {
+          id: Date.now(),
+          name: `Simulated Basket (${new Date().toLocaleDateString()})`,
+          initial_investment: Number(amount) || 100000,
+          horizon_years: Number(years) || 3,
+          expected_return: data?.expected_return || expReturn || 18.0,
+          volatility: data?.volatility || volatility || 16.0,
+          sharpe_ratio: 0.85,
+          notes: "1-Click Executed Monte Carlo Stress Basket",
+          created_at: new Date().toISOString(),
+          assets: stagedSimOrders.map((o) => ({
+            ticker: o.ticker,
+            name: o.company_name,
+            weight: (o.weight_pct || 25) / 100,
+            allocation_amount: Math.round((Number(o.quantity) || 1) * (Number(o.price) || 1000)),
+          })),
+        };
+        localStorage.setItem(savedStorageKey, JSON.stringify([simPortfolio, ...localSaved.filter((p: any) => p.name !== simPortfolio.name)]));
+
+        if (user) {
+          apiFetch("/api/v1/portfolios", {
+            method: "POST",
+            body: JSON.stringify({
+              name: simPortfolio.name,
+              initial_investment: simPortfolio.initial_investment,
+              horizon_years: simPortfolio.horizon_years,
+              expected_return: simPortfolio.expected_return,
+              volatility: simPortfolio.volatility,
+              sharpe_ratio: simPortfolio.sharpe_ratio,
+              notes: simPortfolio.notes,
+              assets: simPortfolio.assets,
+            }),
+          }).catch((err) => console.warn("Sim cloud auto-save sync:", err));
+        }
+      } catch (saveErr) {
+        console.error("Auto-saving simulated portfolio failed:", saveErr);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    setShowSimOrderModal(false);
+    router.push("/orders");
+  };
+
   return (
     <AuthTeaserGate
       title="Monte Carlo Simulation & Stress Testing"
@@ -231,18 +425,18 @@ export default function Simulation() {
       ]}
     >
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
-        {/* 🗺️ COHESIVE 4-STAGE LIFECYCLE WORKFLOW STEPPER */}
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        {/* INSTITUTIONAL 4-STAGE LIFECYCLE WORKFLOW STEPPER */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
             <Link
               href="/onboarding"
               className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
             >
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-slate-400">Step 1</span>
-                <span className="text-[10px] text-blue-600 font-semibold">Change Goal</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono">Stage 01</span>
+                <span className="text-[10px] text-blue-600 font-semibold">Change Target</span>
               </div>
-              <span className="font-bold text-slate-800 mt-1">🎯 Goal & Demat Basket</span>
+              <span className="font-bold text-slate-900 mt-1">Goal & Basket Definition</span>
             </Link>
 
             <Link
@@ -250,18 +444,18 @@ export default function Simulation() {
               className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
             >
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-slate-400">Step 2</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono">Stage 02</span>
                 <span className="text-[10px] text-blue-600 font-semibold">Adjust Weights</span>
               </div>
-              <span className="font-bold text-slate-800 mt-1">📊 Markowitz MPT Optimizer</span>
+              <span className="font-bold text-slate-900 mt-1">Markowitz SLSQP Optimizer</span>
             </Link>
 
             <div className="p-3 rounded-lg bg-slate-900 text-white shadow-sm flex flex-col justify-between">
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-blue-400">Step 3 • Active Hub</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-blue-400 font-mono">Stage 03 • Active</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               </div>
-              <span className="font-bold text-white mt-1">🎲 Monte Carlo Stress Test</span>
+              <span className="font-bold text-white mt-1">Monte Carlo Stress Engine</span>
             </div>
 
             <Link
@@ -269,10 +463,10 @@ export default function Simulation() {
               className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
             >
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-slate-400">Step 4</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono">Stage 04</span>
                 <span className="text-[10px] text-slate-500 font-medium">Final Stage</span>
               </div>
-              <span className="font-bold text-slate-800 mt-1">⚖️ Tax Rebalance & Orders</span>
+              <span className="font-bold text-slate-900 mt-1">Tax Rebalancing & Orders</span>
             </Link>
           </div>
         </div>
@@ -280,7 +474,7 @@ export default function Simulation() {
         {/* Header with Beginner Guide Toggle */}
         <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Monte Carlo Simulation & Risk Engine</h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Monte Carlo Simulation & Risk Engine</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
               Stochastic multivariate forecasting and 95% Value-at-Risk envelope modeling
             </p>
@@ -291,65 +485,65 @@ export default function Simulation() {
               href="/compare"
               className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors"
             >
-              👥 Compare with Peers
+              Peer Benchmark
             </Link>
 
             <button
               onClick={() => setShowGuide(!showGuide)}
-              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
+              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors"
             >
-              <span>{showGuide ? "Hide Beginner Guide" : "📖 How to Read This Simulation"}</span>
+              {showGuide ? "Close Documentation" : "Methodology Guide"}
             </button>
           </div>
         </div>
 
-        {/* Beginner Guide Card (Collapsible) */}
+        {/* Methodology Guide Card (Collapsible) */}
         {showGuide && (
           <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800 shadow-md space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
-                Beginner Guide: Understanding Monte Carlo Modeling
+              <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider font-mono">
+                Methodology: Multivariate Stochastic Simulation
               </h3>
               <button
                 onClick={() => setShowGuide(false)}
-                className="text-slate-400 hover:text-white text-xs"
+                className="text-slate-400 hover:text-white text-xs font-mono"
               >
-                ✕ Close
+                [Close]
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs leading-relaxed text-slate-300">
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-emerald-400">1. What are the Trajectories?</p>
+                <p className="font-bold text-emerald-400">1. Stochastic Paths</p>
                 <p>
-                  Instead of guessing a single future price, Monte Carlo runs <strong>600+ realistic simulated market paths</strong> incorporating asset correlations, daily volatility, and mean returns.
+                  Instead of a single deterministic forecast, Monte Carlo simulates 600+ randomized daily market paths using asset correlation and volatility matrices.
                 </p>
               </div>
 
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-blue-400">2. What is the 5th Percentile (Tail Risk)?</p>
+                <p className="font-bold text-blue-400">2. 5th Percentile (Tail Risk Floor)</p>
                 <p>
-                  In <strong>95 out of 100 market conditions</strong>, your capital will perform better than this number. It models how your basket survives severe bear markets and macro recessions.
+                  In 95 out of 100 simulated market cycles, portfolio terminal value exceeds this floor, modeling macro drawdowns.
                 </p>
               </div>
 
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-amber-400">3. Probability of Loss (VaR)</p>
+                <p className="font-bold text-amber-400">3. Probability of Capital Loss (VaR)</p>
                 <p>
-                  The exact percentage of simulated paths that ended up below your starting capital. Lower is safer; long horizons and rebalancing reduce this risk.
+                  Percentage of simulated paths that finish below starting principal.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* ONE-CLICK STARTER BASKETS FOR QUICK EXPLORATION */}
+        {/* STARTER BASKETS */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
           <div className="flex justify-between items-center">
-            <h2 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Quick One-Click Starter Portfolios
+            <h2 className="text-xs font-semibold text-slate-700 uppercase tracking-wider font-mono">
+              Starter Baskets & Benchmarks
             </h2>
-            <span className="text-[10px] text-slate-400">Click to instantly simulate</span>
+            <span className="text-[10px] text-slate-400">Select to simulate</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -361,7 +555,7 @@ export default function Simulation() {
               >
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-slate-900">{b.name}</h4>
-                  <span className="text-blue-600 text-xs font-bold">Simulate →</span>
+                  <span className="text-blue-600 text-xs font-semibold">Simulate →</span>
                 </div>
                 <p className="text-[11px] text-slate-500">{b.desc}</p>
                 <div className="flex flex-wrap gap-1 pt-1">
@@ -567,14 +761,15 @@ export default function Simulation() {
         {/* RESULTS */}
         {data && (
           <div className="space-y-6">
-            {/* Plain-English Investor Takeaway Banner */}
+            {/* Investor Takeaway Banner */}
             <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-start gap-3">
-              <span className="text-xl">💡</span>
               <div className="text-xs leading-relaxed text-slate-700">
-                <p className="font-semibold text-slate-900">Investor Simulation Summary:</p>
-                <p className="mt-0.5">
-                  With a starting capital of <strong>₹{Number(amount).toLocaleString()}</strong> over <strong>{years} years</strong>, your expected average terminal valuation is <strong>₹{Number(data.expected_value).toLocaleString()}</strong>.
-                  In <strong>95 out of 100 simulated market cycles</strong>, your capital remains above the tail-risk floor of <strong>₹{Number(data.worst_case).toLocaleString()}</strong>, with a <strong>{data.probability_of_loss}%</strong> probability of finishing below your starting capital.
+                <p className="font-bold text-slate-900 font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-1">
+                  Simulation Outcome Analysis:
+                </p>
+                <p>
+                  With a starting capital of <strong>₹{Number(amount).toLocaleString()}</strong> over <strong>{years} years</strong>, expected average terminal valuation is <strong>₹{Number(data.expected_value).toLocaleString()}</strong>.
+                  In <strong>95 out of 100 simulated market cycles</strong>, capital remains above the tail-risk floor of <strong>₹{Number(data.worst_case).toLocaleString()}</strong>, with a <strong>{data.probability_of_loss}%</strong> probability of finishing below starting principal.
                 </p>
               </div>
             </div>
@@ -614,7 +809,7 @@ export default function Simulation() {
               </div>
             </div>
 
-            {/* 🔥 PHASE 6: GEMINI AI STOCHASTIC SIMULATION & TAIL-RISK INTELLIGENCE */}
+            {/* PHASE 6: GEMINI AI STOCHASTIC SIMULATION & TAIL-RISK INTELLIGENCE */}
             {(aiInsights || aiLoading) && (
               <AISimulationInsights insights={aiInsights || ({} as any)} loading={aiLoading} />
             )}
@@ -636,7 +831,7 @@ export default function Simulation() {
               </div>
             )}
 
-            {/* 📈 INTERACTIVE CHARTS WITH VIEW FILTERS */}
+            {/* CHARTS WITH VIEW FILTERS */}
             {data?.paths && (
               <MonteCarloCharts
                 paths={data.paths}
@@ -676,10 +871,12 @@ export default function Simulation() {
               </div>
             )}
 
-            {/* 🚀 GUIDED NEXT STEP ACTION BAR */}
+            {/* GUIDED NEXT STEP ACTION BAR */}
             <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800 flex flex-wrap justify-between items-center gap-4">
               <div>
-                <span className="text-[10px] font-bold bg-emerald-500 text-slate-950 px-2 py-0.5 rounded uppercase">Step 3 Complete</span>
+                <span className="text-[10px] font-bold bg-slate-800 text-slate-300 px-2 py-0.5 rounded uppercase tracking-wider font-mono border border-slate-700">
+                  Stage 03 Complete
+                </span>
                 <h4 className="text-sm font-bold text-white mt-1">Ready to optimize taxes & execute your portfolio?</h4>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Calculate Union Budget 2024 STCG/LTCG liabilities and generate 1-click Zerodha Kite order baskets.
@@ -687,19 +884,160 @@ export default function Simulation() {
               </div>
 
               <div className="flex items-center gap-3">
+                <button
+                  onClick={handleDeploySimulatedOrders}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold font-mono px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+                >
+                  1-Click Place Simulated Orders →
+                </button>
+
                 <Link
                   href="/portfolio"
-                  className="text-xs text-slate-300 hover:text-white px-3 py-2"
+                  className="text-xs text-slate-300 hover:text-white px-3 py-2 font-medium"
                 >
                   ← Back to MPT Optimizer
                 </Link>
 
                 <Link
                   href="/rebalance"
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-6 py-2.5 rounded-lg transition-colors shadow-sm"
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-6 py-2.5 rounded-lg transition-colors shadow-sm"
                 >
-                  ⚖️ Proceed to Step 4: Tax Rebalance & Execution →
+                  Stage 04: Tax Rebalancing & Orders →
                 </Link>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* SIMULATION ORDER REVIEW & STAGING MODAL */}
+        {showSimOrderModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Review & Confirm Simulation Orders</h2>
+                  <p className="text-xs text-slate-500">Edit quantities, switch weights, or edit stock prices before execution.</p>
+                </div>
+                <button
+                  onClick={() => setShowSimOrderModal(false)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+
+              {/* Order Staging Table */}
+              <div className="space-y-3">
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-500 uppercase font-mono text-[10px] border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Security</th>
+                        <th className="py-2.5 px-2">Action</th>
+                        <th className="py-2.5 px-2">Quantity</th>
+                        <th className="py-2.5 px-2">Price (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Gross Total (₹)</th>
+                        <th className="py-2.5 px-2 text-center">Remove</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {stagedSimOrders.map((o, idx) => {
+                        const rowTotal = Math.round((Number(o.quantity) || 0) * (Number(o.price) || 0));
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-2.5 px-3">
+                              <span className="font-bold text-slate-900 block">{o.company_name}</span>
+                              <span className="font-mono text-[10px] text-slate-400">{o.ticker} ({o.weight_pct}%)</span>
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 font-mono">
+                                BUY
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <input
+                                type="number"
+                                min={1}
+                                value={o.quantity}
+                                onChange={(e) => {
+                                  const updated = [...stagedSimOrders];
+                                  updated[idx].quantity = Math.max(1, Number(e.target.value));
+                                  setStagedSimOrders(updated);
+                                }}
+                                className="w-20 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <input
+                                type="number"
+                                min={1}
+                                value={o.price}
+                                onChange={(e) => {
+                                  const updated = [...stagedSimOrders];
+                                  updated[idx].price = Number(e.target.value);
+                                  setStagedSimOrders(updated);
+                                }}
+                                className="w-24 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900">
+                              ₹{rowTotal.toLocaleString()}
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <button
+                                onClick={() => {
+                                  setStagedSimOrders(stagedSimOrders.filter((_, i) => i !== idx));
+                                }}
+                                className="text-slate-400 hover:text-rose-600 font-bold px-2 py-1"
+                                title="Remove stock"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Capital Summary */}
+                <div className="bg-slate-50 p-3.5 rounded-lg text-xs space-y-1.5 border border-slate-200 font-mono">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Staged Orders:</span>
+                    <span className="font-bold text-slate-900">{stagedSimOrders.length} securities</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Estimated Total Capital:</span>
+                    <span className="font-bold text-slate-900">
+                      ₹{stagedSimOrders.reduce((sum, o) => sum + Math.round((Number(o.quantity) || 0) * (Number(o.price) || 0)), 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Est. Brokerage & Taxes:</span>
+                    <span className="font-bold text-slate-500">
+                      ₹{Math.round(stagedSimOrders.reduce((sum, o) => sum + (Number(o.quantity) * Number(o.price) * 0.001), 0)).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSimOrderModal(false)}
+                    className="px-4 py-2 border border-slate-200 text-xs font-semibold rounded-lg hover:bg-slate-50 text-slate-700"
+                  >
+                    Cancel / Edit In Simulator
+                  </button>
+
+                  <button
+                    onClick={handleConfirmSimOrders}
+                    disabled={stagedSimOrders.length === 0}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold font-mono rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    Confirm & Execute {stagedSimOrders.length} Orders →
+                  </button>
+                </div>
               </div>
             </div>
           </div>

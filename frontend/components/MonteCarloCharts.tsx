@@ -147,7 +147,7 @@ export default function MonteCarloCharts({
 
         {/* Primary View Switcher */}
         <div className="flex items-center gap-2">
-          <div className="bg-slate-100 p-1 rounded-lg flex gap-1 text-xs">
+          <div className="bg-slate-100 p-1 rounded-lg flex gap-1 text-xs font-mono">
             <button
               onClick={() => setChartMode("paths")}
               className={`px-3 py-1.5 rounded-md font-medium transition-all ${
@@ -156,7 +156,7 @@ export default function MonteCarloCharts({
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              📈 Price Trajectories
+              Price Trajectories
             </button>
             <button
               onClick={() => setChartMode("distribution")}
@@ -166,7 +166,7 @@ export default function MonteCarloCharts({
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              📊 Terminal Distribution
+              Terminal Distribution
             </button>
           </div>
         </div>
@@ -174,7 +174,7 @@ export default function MonteCarloCharts({
 
       {/* Trajectory Filters Toolbar */}
       {chartMode === "paths" && (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-mono text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
               Filter View:
@@ -197,7 +197,7 @@ export default function MonteCarloCharts({
                   : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
               }`}
             >
-              🛡️ Confidence Cone (90% Band)
+              Confidence Cone (90% Band)
             </button>
             <button
               onClick={() => setActiveFilter("median")}
@@ -207,7 +207,7 @@ export default function MonteCarloCharts({
                   : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
               }`}
             >
-              🎯 Median Trend Only
+              Median Trend Only
             </button>
             <button
               onClick={() => setActiveFilter("bull")}
@@ -217,7 +217,7 @@ export default function MonteCarloCharts({
                   : "bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
               }`}
             >
-              🟢 Bullish Paths (Top 25%)
+              Bullish Paths (Top 25%)
             </button>
             <button
               onClick={() => setActiveFilter("bear")}
@@ -227,7 +227,7 @@ export default function MonteCarloCharts({
                   : "bg-white border border-rose-200 text-rose-700 hover:bg-rose-50"
               }`}
             >
-              🔴 Stress Drawdowns (Bottom 25%)
+              Stress Drawdowns (Bottom 25%)
             </button>
           </div>
 

@@ -1,19 +1,45 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List, Dict, Any
 from app.schemas.portfolio import StockAnalysisRequest
 from app.services.market_data import (
     get_cached_companies,
     analyze_stock,
     get_financial_analysis,
-    download_statement_csv
+    download_statement_csv,
+    get_batch_quotes,
+    get_single_quote
 )
 
 router = APIRouter()
 
 
+class BatchQuotesRequest(BaseModel):
+    tickers: List[str]
+
+
 @router.get("/companies")
 def get_companies():
     return get_cached_companies()
+
+
+@router.post("/quotes")
+@router.post("/stocks/quotes")
+def fetch_batch_quotes(data: BatchQuotesRequest):
+    try:
+        return get_batch_quotes(data.tickers)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/quote/{ticker}")
+@router.get("/stocks/quote/{ticker}")
+def fetch_single_quote(ticker: str):
+    try:
+        return get_single_quote(ticker)
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.post("/analyze")
@@ -44,3 +70,4 @@ def download_statement(statement_type: str, ticker: str):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

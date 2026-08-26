@@ -119,13 +119,13 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-              Frictionless
+            <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider font-mono">
+              Frictionless Ingestion
             </span>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Import Existing Demat Holdings</h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Import Demat Equity Holdings</h1>
           </div>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Zero file downloads required. Copy-paste directly from Zerodha Kite, Groww, AngelOne or pick an institutional preset.
+            Zero file downloads required. Copy-paste directly from Zerodha Kite, Groww, AngelOne or select an institutional model basket.
           </p>
         </div>
 
@@ -135,49 +135,49 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
               setInputText(sampleZerodhaText);
               handleParse(sampleZerodhaText);
             }}
-            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-lg transition-colors"
+            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3.5 py-2 rounded-lg transition-colors font-mono"
           >
-            ⚡ Load Sample Demat Basket
+            Load Sample Demat Basket
           </button>
         </div>
       </div>
 
       {/* TABS NAVIGATION */}
-      <div className="flex gap-2 border-b border-slate-200 pb-2">
+      <div className="flex gap-2 border-b border-slate-200 pb-2 font-mono text-xs">
         <button
           onClick={() => setActiveTab("CLIPBOARD")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+          className={`px-4 py-2 rounded-lg transition-all font-semibold ${
             activeTab === "CLIPBOARD" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
           }`}
         >
-          📋 Screen Copy-Paste (Zero Download)
+          Clipboard Paste (Zero Download)
         </button>
 
         <button
           onClick={() => setActiveTab("PRESETS")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+          className={`px-4 py-2 rounded-lg transition-all font-semibold ${
             activeTab === "PRESETS" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
           }`}
         >
-          🏛️ Superstar & Mutual Fund Presets
+          Model & Fund Presets
         </button>
 
         <button
           onClick={() => setActiveTab("QUICK_TEXT")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+          className={`px-4 py-2 rounded-lg transition-all font-semibold ${
             activeTab === "QUICK_TEXT" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
           }`}
         >
-          ⚡ Multi-Ticker String (e.g. RELIANCE, TCS)
+          Multi-Ticker String
         </button>
 
         <button
           onClick={() => setActiveTab("CSV")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+          className={`px-4 py-2 rounded-lg transition-all font-semibold ${
             activeTab === "CSV" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
           }`}
         >
-          📂 CSV File Drop
+          CSV File Drop
         </button>
       </div>
 
@@ -186,18 +186,18 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Paste Broker Table / Holdings Screen</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">Paste Broker Holdings Screen</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
                 Select your holdings rows on Zerodha Kite, Groww, or AngelOne web, press Cmd+C / Ctrl+C, and paste below:
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 font-semibold">Source Broker:</span>
+            <div className="flex items-center gap-2 font-mono">
+              <span className="text-[11px] text-slate-500 font-semibold">Broker:</span>
               <select
                 value={broker}
                 onChange={(e) => setBroker(e.target.value)}
-                className="border border-slate-200 text-xs px-2.5 py-1.5 rounded-lg bg-white outline-none"
+                className="border border-slate-200 text-xs px-2.5 py-1.5 rounded-lg bg-white outline-none font-mono"
               >
                 <option value="ZERODHA">Zerodha Kite</option>
                 <option value="GROWW">Groww</option>
@@ -211,14 +211,14 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
             rows={6}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Paste your copied holding rows here... Example:&#10;RELIANCE  20  2850.00  2024-01-15&#10;TCS  15  3920.00  2023-10-20&#10;HDFC Bank 30 shares @ 1540"
+            placeholder="Paste copied holding rows here... Example:&#10;RELIANCE  20  2850.00  2024-01-15&#10;TCS  15  3920.00  2023-10-20&#10;HDFC Bank 30 shares @ 1540"
             className="w-full font-mono text-xs border border-slate-200 p-3.5 rounded-lg outline-none focus:border-slate-800"
           />
 
           <div className="flex justify-between items-center pt-2">
             <button
               onClick={() => setInputText("")}
-              className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
+              className="text-xs text-slate-400 hover:text-slate-600 font-medium font-mono"
             >
               Clear Box
             </button>
@@ -226,9 +226,9 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
             <button
               onClick={() => handleParse()}
               disabled={loading || !inputText.trim()}
-              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-6 py-2.5 rounded-lg transition-colors disabled:opacity-50"
+              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-6 py-2.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {loading ? "Parsing Live LTP & P&L..." : "Smart Parse & Enrich Live Prices →"}
+              {loading ? "Parsing Live LTP & Valuation..." : "Parse & Enrich Live Quotes →"}
             </button>
           </div>
         </div>
@@ -245,7 +245,7 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
               <div>
                 <h3 className="text-xs font-bold text-slate-900">{p.name}</h3>
                 <p className="text-[11px] text-slate-500 mt-1">{p.desc}</p>
-                <pre className="mt-3 bg-slate-50 p-2.5 rounded-lg text-[10px] font-mono text-slate-600 overflow-x-auto">
+                <pre className="mt-3 bg-slate-50 p-2.5 rounded-lg text-[10px] font-mono text-slate-600 overflow-x-auto border border-slate-100">
                   {p.text}
                 </pre>
               </div>
@@ -255,9 +255,9 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
                   setInputText(p.text);
                   handleParse(p.text);
                 }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg transition-colors"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
               >
-                1-Click Load & Analyze →
+                Load Model Basket →
               </button>
             </div>
           ))}
@@ -268,8 +268,8 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
       {activeTab === "QUICK_TEXT" && (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div>
-            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Quick Multi-Ticker Input</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">Quick Multi-Ticker Input</h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">
               Enter Indian stock symbols separated by commas (e.g. RELIANCE, TCS, INFY, HDFCBANK, TATAMOTORS, ITC):
             </p>
           </div>
@@ -279,14 +279,14 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="RELIANCE, TCS, HDFCBANK, INFY, TATAMOTORS, ICICIBANK, LT"
-            className="w-full border border-slate-200 px-4 py-2.5 rounded-lg text-xs font-semibold outline-none focus:border-slate-800"
+            className="w-full border border-slate-200 px-4 py-2.5 rounded-lg text-xs font-semibold outline-none focus:border-slate-800 font-mono"
           />
 
           <div className="flex justify-end">
             <button
               onClick={() => handleParse()}
               disabled={loading || !inputText.trim()}
-              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-6 py-2.5 rounded-lg transition-colors disabled:opacity-50"
+              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-6 py-2.5 rounded-lg transition-colors disabled:opacity-50"
             >
               {loading ? "Fetching NSE Quotes..." : "Generate Equal-Weighted Demat Basket →"}
             </button>
@@ -305,17 +305,17 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
             id="csv-file-input"
           />
           <label htmlFor="csv-file-input" className="cursor-pointer block space-y-2">
-            <div className="w-12 h-12 mx-auto bg-slate-100 rounded-full flex items-center justify-center text-xl">
-              📂
+            <div className="w-12 h-12 mx-auto bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold font-mono text-slate-700">
+              CSV
             </div>
             <p className="text-xs font-bold text-slate-900">Click to upload or drag & drop Zerodha / Groww CSV</p>
-            <p className="text-[11px] text-slate-400">Supports standard holdings CSV, CAS PDF/text, or broker exports</p>
+            <p className="text-[11px] text-slate-400 font-mono">Supports standard holdings CSV, CAS text, or broker exports</p>
           </label>
         </div>
       )}
 
       {/* ERROR */}
-      {error && <p className="text-xs text-rose-600 bg-rose-50 p-3.5 rounded-xl border border-rose-200">{error}</p>}
+      {error && <p className="text-xs text-rose-600 bg-rose-50 p-3.5 rounded-xl border border-rose-200 font-mono">{error}</p>}
 
       {/* PARSED HEALTH CHECK RESULTS */}
       {parsedData && (
@@ -327,7 +327,7 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
               <h2 className="text-2xl font-bold text-slate-900 mt-1">
                 ₹{Number(parsedData.total_invested).toLocaleString()}
               </h2>
-              <p className="text-[10px] text-slate-400 mt-0.5">{parsedData.holdings_count} Securities</p>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-mono">{parsedData.holdings_count} Constituents</p>
             </div>
 
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -335,7 +335,7 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
               <h2 className="text-2xl font-bold text-blue-600 mt-1">
                 ₹{Number(parsedData.total_current_value).toLocaleString()}
               </h2>
-              <p className="text-[10px] text-slate-400 mt-0.5">Live NSE Pricing</p>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Live NSE Valuation</p>
             </div>
 
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -343,40 +343,40 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
               <h2 className={`text-2xl font-bold mt-1 ${parsedData.total_unrealized_pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                 {parsedData.total_unrealized_pnl >= 0 ? "+" : ""}₹{Number(parsedData.total_unrealized_pnl).toLocaleString()}
               </h2>
-              <p className={`text-[10px] font-bold mt-0.5 ${parsedData.total_unrealized_pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {parsedData.total_unrealized_pnl >= 0 ? "▲" : "▼"} {parsedData.total_unrealized_pnl_percent}% Return
+              <p className={`text-[10px] font-bold mt-0.5 font-mono ${parsedData.total_unrealized_pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {parsedData.total_unrealized_pnl_percent}% Return
               </p>
             </div>
 
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Portfolio Health</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Portfolio Concentration</span>
               <h2 className="text-2xl font-bold text-slate-900 mt-1">
                 {parsedData.holdings_count >= 5 ? "Diversified" : "Concentrated"}
               </h2>
-              <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">Ready for Tax Optimization</p>
+              <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 font-mono">Ready for Optimization</p>
             </div>
           </div>
 
           {/* Holdings Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Parsed Demat Assets ({parsedData.holdings.length})
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">
+                Parsed Demat Constituents ({parsedData.holdings.length})
               </h3>
-              <span className="text-[11px] text-slate-500 font-medium">Click any row to inspect</span>
+              <span className="text-[11px] text-slate-500 font-medium font-mono">NSE Live Feed</span>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-200">
+                <thead className="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-200 font-mono">
                   <tr>
                     <th className="px-4 py-3">Security</th>
                     <th className="px-4 py-3">Sector</th>
                     <th className="px-4 py-3 text-right">Qty</th>
                     <th className="px-4 py-3 text-right">Avg Cost</th>
                     <th className="px-4 py-3 text-right">LTP (₹)</th>
-                    <th className="px-4 py-3 text-right">Cur. Value (₹)</th>
-                    <th className="px-4 py-3 text-right">P&L (₹ / %)</th>
+                    <th className="px-4 py-3 text-right">Market Value</th>
+                    <th className="px-4 py-3 text-right">P&L</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -404,32 +404,32 @@ BHARTIARTL\t40\t1420\t2024-01-20`,
           {/* Action Bar: Next Steps in Lifecycle */}
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
             <div>
-              <p className="text-xs font-bold text-slate-900">What would you like to do with these imported holdings?</p>
+              <p className="text-xs font-bold text-slate-900">Proceed with imported portfolio holdings</p>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Proceed directly to Tax-Loss Rebalancing, Multi-Portfolio Comparison, or Markowitz Optimization.
+                Execute Tax-Loss Harvesting Rebalancing, Peer Benchmarking, or Markowitz SLSQP Optimization.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <Link
                 href="/compare"
-                className="border border-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-slate-50 transition-colors"
+                className="border border-slate-200 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-slate-50 transition-colors"
               >
-                👥 Compare vs. Nifty 50 & Friends →
+                Peer Benchmark →
               </Link>
 
               <Link
                 href="/rebalance"
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2.5 rounded-lg transition-colors shadow-sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition-colors shadow-sm"
               >
-                ⚖️ Tax & Exit-Load Rebalance →
+                Tax Rebalancing →
               </Link>
 
               <Link
                 href="/portfolio"
-                className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-lg transition-colors shadow-sm"
+                className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition-colors shadow-sm"
               >
-                📊 Markowitz MPT Optimizer →
+                Portfolio Studio →
               </Link>
             </div>
           </div>

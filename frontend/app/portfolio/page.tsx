@@ -55,6 +55,7 @@ export default function Portfolio() {
         const parsed = JSON.parse(goalData);
         if (parsed.investment) setInvestment(parsed.investment);
         if (parsed.years) setYears(parsed.years);
+        if (parsed.goal_name) setPortfolioName(parsed.goal_name);
 
         if (parsed.tickers && parsed.tickers.length > 0) {
           const mappedCompanies = parsed.tickers.map((t: string) => {
@@ -134,6 +135,31 @@ export default function Portfolio() {
     }, 100);
   };
 
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [aiRecommendations, setAiRecommendations] = useState<any>(null);
+  const [recsLoading, setRecsLoading] = useState(false);
+
+  const fetchAiRecommendations = async () => {
+    setRecsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ai/recommend-stocks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_tickers: selected.map((c) => c.ticker),
+          goal_type: "Maximum Sharpe Growth",
+          horizon_years: Number(years) || 3,
+        }),
+      });
+      const data = await res.json();
+      setAiRecommendations(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRecsLoading(false);
+    }
+  };
+
   const analyzePortfolio = async (customSelected?: any[]) => {
     const basketToUse = customSelected || selected;
     if (basketToUse.length === 0) {
@@ -144,6 +170,7 @@ export default function Portfolio() {
     setAiLoading(true);
     setResult(null);
     setAiInsights(null);
+    setAnalysisError(null);
 
     try {
       const res = await fetch(`${API_BASE_URL}/portfolio-analyze`, {
@@ -159,6 +186,13 @@ export default function Portfolio() {
       });
 
       const data = await res.json();
+      if (!res.ok || data.error || !data.optimal_weights) {
+        setAnalysisError(data.error || "Failed to calculate portfolio optimization");
+        setLoading(false);
+        setAiLoading(false);
+        return;
+      }
+
       setResult(data);
       setLoading(false);
 
@@ -194,20 +228,18 @@ export default function Portfolio() {
       } finally {
         setAiLoading(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setAnalysisError(err?.message || "Failed to connect to optimization server");
       setLoading(false);
       setAiLoading(false);
     }
   };
 
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [stagedOrders, setStagedOrders] = useState<any[]>([]);
+
   const handleOpenSaveModal = () => {
-    if (!user) {
-      if (confirm("You need to sign in to save your portfolios to the cloud. Go to login?")) {
-        router.push("/login");
-      }
-      return;
-    }
     setPortfolioName(`Portfolio (${selected.map((s) => s.ticker.replace(".NS", "")).join(", ")})`);
     setShowSaveModal(true);
     setSaveSuccess(false);
@@ -215,36 +247,256 @@ export default function Portfolio() {
 
   const handleSaveToCloud = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!portfolioName) return;
+    if (!portfolioName || !result?.optimal_weights) return;
 
     setSaveLoading(true);
     try {
-      const assets = Object.entries(result.optimal_weights).map(([ticker, weight]: any) => ({
+      const assets = Object.entries(result.optimal_weights).map(([ticker, weight]: any, aIdx: number) => ({
+        id: Date.now() + aIdx,
         ticker,
         weight: Number(weight) / 100,
         allocation_amount: (Number(investment) * Number(weight)) / 100,
       }));
 
-      await apiFetch("/api/v1/portfolios", {
-        method: "POST",
-        body: JSON.stringify({
-          name: portfolioName,
-          initial_investment: Number(investment),
-          horizon_years: Number(years),
-          expected_return: result.expected_return,
-          volatility: result.volatility,
-          sharpe_ratio: result.sharpe_ratio,
-          notes: portfolioNotes,
-          assets,
-        }),
-      });
+      const newSavedPortfolio = {
+        id: Date.now(),
+        name: portfolioName,
+        initial_investment: Number(investment),
+        horizon_years: Number(years),
+        expected_return: result.expected_return,
+        volatility: result.volatility,
+        sharpe_ratio: result.sharpe_ratio,
+        notes: portfolioNotes,
+        created_at: new Date().toISOString(),
+        assets,
+      };
+
+      // Save to user-specific localStorage if logged in, else guest
+      try {
+        const storageKey = user ? `saved_user_portfolios_${user.id}` : "saved_user_portfolios_guest";
+        const localSaved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        localStorage.setItem(storageKey, JSON.stringify([newSavedPortfolio, ...localSaved]));
+      } catch (lErr) {
+        console.error("Local save error:", lErr);
+      }
+
+      // Also sync to cloud API if authenticated
+      if (user) {
+        await apiFetch("/api/v1/portfolios", {
+          method: "POST",
+          body: JSON.stringify({
+            name: portfolioName,
+            initial_investment: Number(investment),
+            horizon_years: Number(years),
+            expected_return: result.expected_return,
+            volatility: result.volatility,
+            sharpe_ratio: result.sharpe_ratio,
+            notes: portfolioNotes,
+            assets,
+          }),
+        });
+      }
 
       setSaveSuccess(true);
     } catch (err: any) {
-      alert(err.message || "Failed to save portfolio to cloud");
+      console.warn("Cloud sync notice:", err);
+      // Still consider success because local save succeeded
+      setSaveSuccess(true);
     } finally {
       setSaveLoading(false);
     }
+  };
+
+  // Open Staging & Review Modal with Live Market Prices
+  const handleDeployDirectOrders = async () => {
+    if (!result?.optimal_weights) return;
+
+    const totalCap = Number(investment) || 100000;
+    const tickers = Object.keys(result.optimal_weights);
+
+    let priceMap: Record<string, number> = {
+      "RELIANCE.NS": 2980,
+      "TCS.NS": 4150,
+      "HDFCBANK.NS": 1640,
+      "ICICIBANK.NS": 1210,
+      "INFY.NS": 1820,
+      "LT.NS": 3620,
+      "TATAMOTORS.NS": 980,
+      "SUNPHARMA.NS": 1710,
+      "BHARTIARTL.NS": 1480,
+      "BAJFINANCE.NS": 7120,
+      "TITAN.NS": 3450,
+      "ITC.NS": 490,
+      "SBIN.NS": 815,
+      "TATASTEEL.NS": 155,
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/stocks/quotes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers }),
+      });
+      if (res.ok) {
+        const quotes = await res.json();
+        if (quotes && typeof quotes === "object") {
+          Object.entries(quotes).forEach(([t, q]: any) => {
+            if (q && q.current_price) {
+              priceMap[t] = Number(q.current_price);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Live quote fetch for order staging fallback:", e);
+    }
+
+    const staged: any[] = [];
+    Object.entries(result.optimal_weights).forEach(([ticker, weight]: any) => {
+      const wPct = Number(weight) / 100;
+      if (wPct <= 0) return;
+
+      const alloc = Math.round(totalCap * wPct);
+      const ltp = priceMap[ticker] || 1500;
+      const qty = Math.max(1, Math.floor(alloc / ltp));
+      const foundName = selected.find((s) => s.ticker === ticker)?.name || ticker.replace(".NS", "");
+
+      staged.push({
+        ticker,
+        company_name: foundName,
+        action: "BUY",
+        quantity: qty,
+        price: ltp,
+        weight_pct: Math.round(wPct * 100),
+      });
+    });
+
+    setStagedOrders(staged);
+    setShowOrderModal(true);
+  };
+
+  // Confirm Staged Orders
+  const handleConfirmAndExecuteOrders = () => {
+    const now = new Date();
+    const formattedTime = now.toISOString().replace("T", " ").substring(0, 19);
+
+    const newOrders: any[] = [];
+    const newPositions: any[] = [];
+
+    stagedOrders.forEach((o) => {
+      const actualVal = Math.round(o.quantity * o.price * 100) / 100;
+      const brokerage = Math.min(20, Math.round(actualVal * 0.0003 * 100) / 100);
+      const stt = Math.round(actualVal * 0.001 * 100) / 100;
+      const orderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+
+      newOrders.push({
+        order_id: orderId,
+        ticker: o.ticker,
+        company_name: o.company_name,
+        action: o.action,
+        quantity: Number(o.quantity),
+        executed_price: Number(o.price),
+        order_value: actualVal,
+        brokerage,
+        stt,
+        status: "FILLED",
+        execution_time: formattedTime,
+        broker_mode: "PORTFOLIO_STUDIO_CONFIRMED",
+      });
+
+      newPositions.push({
+        ticker: o.ticker,
+        company_name: o.company_name,
+        quantity: Number(o.quantity),
+        avg_buy_price: Number(o.price),
+        current_price: Number(o.price),
+        invested_amount: actualVal,
+        current_value: actualVal,
+        unrealized_pnl: 0,
+        unrealized_pnl_pct: 0,
+        day_change_pct: 0.8,
+      });
+    });
+
+    try {
+      const userOrdersKey = `user_${user?.id || "guest"}_order_history`;
+      const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
+
+      const existingOrders = JSON.parse(localStorage.getItem(userOrdersKey) || "[]");
+      localStorage.setItem(userOrdersKey, JSON.stringify([...newOrders, ...existingOrders]));
+
+      // Merge with active positions
+      const existingPositions = JSON.parse(localStorage.getItem(userPositionsKey) || "[]");
+      const mergedMap = new Map<string, any>();
+      existingPositions.forEach((p: any) => mergedMap.set(p.ticker, p));
+
+      newPositions.forEach((p: any) => {
+        if (mergedMap.has(p.ticker)) {
+          const prev = mergedMap.get(p.ticker);
+          const newQty = prev.quantity + p.quantity;
+          const newInvested = prev.invested_amount + p.invested_amount;
+          const newAvgPrice = Math.round((newInvested / newQty) * 100) / 100;
+          mergedMap.set(p.ticker, {
+            ...prev,
+            quantity: newQty,
+            invested_amount: newInvested,
+            avg_buy_price: newAvgPrice,
+            current_value: newQty * p.current_price,
+          });
+        } else {
+          mergedMap.set(p.ticker, p);
+        }
+      });
+
+      localStorage.setItem(userPositionsKey, JSON.stringify(Array.from(mergedMap.values())));
+
+      // Automatically save this executed portfolio in Saved Portfolios
+      try {
+        const savedStorageKey = user ? `saved_user_portfolios_${user.id}` : "saved_user_portfolios_guest";
+        const localSaved = JSON.parse(localStorage.getItem(savedStorageKey) || "[]");
+        const executedPortfolio = {
+          id: Date.now(),
+          name: portfolioName || `Executed Portfolio (${new Date().toLocaleDateString()})`,
+          initial_investment: Number(investment) || 100000,
+          horizon_years: Number(years) || 3,
+          expected_return: result.expected_return,
+          volatility: result.volatility,
+          sharpe_ratio: result.sharpe_ratio,
+          notes: portfolioNotes || "1-Click Executed Markowitz Allocation",
+          created_at: new Date().toISOString(),
+          assets: stagedOrders.map((o) => ({
+            ticker: o.ticker,
+            name: o.company_name,
+            weight: (o.weight_pct || 20) / 100,
+            allocation_amount: Math.round((Number(o.quantity) || 1) * (Number(o.price) || 1000)),
+          })),
+        };
+        localStorage.setItem(savedStorageKey, JSON.stringify([executedPortfolio, ...localSaved.filter((p: any) => p.name !== executedPortfolio.name)]));
+
+        if (user) {
+          apiFetch("/api/v1/portfolios", {
+            method: "POST",
+            body: JSON.stringify({
+              name: executedPortfolio.name,
+              initial_investment: executedPortfolio.initial_investment,
+              horizon_years: executedPortfolio.horizon_years,
+              expected_return: executedPortfolio.expected_return,
+              volatility: executedPortfolio.volatility,
+              sharpe_ratio: executedPortfolio.sharpe_ratio,
+              notes: executedPortfolio.notes,
+              assets: executedPortfolio.assets,
+            }),
+          }).catch((err) => console.warn("Portfolio cloud auto-save sync:", err));
+        }
+      } catch (saveErr) {
+        console.error("Auto-saving executed portfolio failed:", saveErr);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    setShowOrderModal(false);
+    router.push("/orders");
   };
 
   return (
@@ -259,26 +511,26 @@ export default function Portfolio() {
       ]}
     >
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
-        {/* 🗺️ COHESIVE 4-STAGE LIFECYCLE WORKFLOW STEPPER */}
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        {/* INSTITUTIONAL 4-STAGE LIFECYCLE WORKFLOW STEPPER */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
             <Link
               href="/onboarding"
               className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
             >
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-slate-400">Step 1</span>
-                <span className="text-[10px] text-blue-600 font-semibold">Change Goal</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono">Stage 01</span>
+                <span className="text-[10px] text-blue-600 font-semibold">Change Target</span>
               </div>
-              <span className="font-bold text-slate-800 mt-1">🎯 Goal & Demat Basket</span>
+              <span className="font-bold text-slate-900 mt-1">Goal & Basket Definition</span>
             </Link>
 
             <div className="p-3 rounded-lg bg-slate-900 text-white shadow-sm flex flex-col justify-between">
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-blue-400">Step 2 • Active Hub</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-blue-400 font-mono">Stage 02 • Active</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               </div>
-              <span className="font-bold text-white mt-1">📊 Markowitz MPT Optimizer</span>
+              <span className="font-bold text-white mt-1">Markowitz SLSQP Optimizer</span>
             </div>
 
             <Link
@@ -286,10 +538,10 @@ export default function Portfolio() {
               className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
             >
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-slate-400">Step 3</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono">Stage 03</span>
                 <span className="text-[10px] text-slate-500 font-medium">Next Stage</span>
               </div>
-              <span className="font-bold text-slate-800 mt-1">🎲 Monte Carlo Stress Test</span>
+              <span className="font-bold text-slate-900 mt-1">Monte Carlo Stress Engine</span>
             </Link>
 
             <Link
@@ -297,10 +549,10 @@ export default function Portfolio() {
               className="p-3 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all flex flex-col justify-between"
             >
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-bold uppercase text-slate-400">Step 4</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono">Stage 04</span>
                 <span className="text-[10px] text-slate-500 font-medium">Final Stage</span>
               </div>
-              <span className="font-bold text-slate-800 mt-1">⚖️ Tax Rebalance & Orders</span>
+              <span className="font-bold text-slate-900 mt-1">Tax Rebalancing & Orders</span>
             </Link>
           </div>
         </div>
@@ -308,25 +560,25 @@ export default function Portfolio() {
         {/* Header with Guide Toggle */}
         <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Portfolio Studio & MPT Optimizer</h1>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Portfolio Studio & Asset Allocator</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Markowitz Modern Portfolio Theory (MPT) asset allocation with SLSQP numerical solver
+              Modern Portfolio Theory (MPT) mean-variance optimization with SLSQP numerical solver
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Link
               href="/import"
-              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
+              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors"
             >
-              <span>📥 Import Demat Holdings</span>
+              Import Demat Holdings
             </Link>
 
             <button
               onClick={() => setShowGuide(!showGuide)}
-              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors flex items-center gap-1.5"
+              className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-200 font-semibold transition-colors"
             >
-              <span>{showGuide ? "Hide Guide" : "📖 How to Use Studio"}</span>
+              {showGuide ? "Close Documentation" : "Methodology Guide"}
             </button>
 
             {user && (
@@ -340,54 +592,54 @@ export default function Portfolio() {
           </div>
         </div>
 
-        {/* Beginner Guide Card (Collapsible) */}
+        {/* Methodology Guide Card (Collapsible) */}
         {showGuide && (
           <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800 shadow-md space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
-                Beginner Guide: How to Build & Optimize Your Portfolio
+              <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider font-mono">
+                Methodology & Optimization Framework
               </h3>
               <button
                 onClick={() => setShowGuide(false)}
-                className="text-slate-400 hover:text-white text-xs"
+                className="text-slate-400 hover:text-white text-xs font-mono"
               >
-                ✕ Close
+                [Close]
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5 text-xs leading-relaxed text-slate-300">
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-emerald-400">1. Markowitz Theory (MPT)</p>
+                <p className="font-bold text-emerald-400">1. Covariance Matrix</p>
                 <p>
-                  Holding multiple stocks with low correlation reduces total portfolio risk without sacrificing returns (known as the &ldquo;free lunch&rdquo; of finance).
+                  Holding assets with divergent correlation profiles lowers total portfolio variance without sacrificing expected CAGR.
                 </p>
               </div>
 
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-blue-400">2. What is Sharpe Ratio?</p>
+                <p className="font-bold text-blue-400">2. Sharpe Ratio</p>
                 <p>
-                  Measures <strong>return earned per unit of risk</strong> (volatility). A Sharpe &gt; 1.0 means high compounding efficiency; &lt; 0.5 means excess risk for low returns.
+                  Quantifies excess return earned per unit of total risk (annualized standard deviation).
                 </p>
               </div>
 
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-indigo-400">3. SLSQP Optimal Weights</p>
+                <p className="font-bold text-indigo-400">3. SLSQP Numerical Solver</p>
                 <p>
-                  Instead of equal 25% splits, our mathematical solver shifts capital toward high-Sharpe assets to maximize risk-adjusted compounding.
+                  Calculates exact constraint boundaries (5% min, 70% max) to locate the global maximum Sharpe ratio.
                 </p>
               </div>
 
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-purple-400">4. The Efficient Frontier</p>
+                <p className="font-bold text-purple-400">4. Efficient Frontier</p>
                 <p>
-                  The parabolic curve plotting maximum possible returns for every unit of volatility. The tangency point marks your optimal allocation.
+                  The optimal hyperbola mapping highest achievable CAGR for every unit of volatility.
                 </p>
               </div>
 
               <div className="p-3.5 bg-slate-800/80 rounded-lg border border-slate-700 space-y-1">
-                <p className="font-bold text-amber-400">5. AI Diagnostics & Swaps</p>
+                <p className="font-bold text-amber-400">5. Diagnostics & Swaps</p>
                 <p>
-                  Google Gemini detects underperforming laggards in your basket and lets you 1-click swap them for higher-efficiency alternatives.
+                  Automated detection of low-Sharpe constituents with recommended high-efficiency alternatives.
                 </p>
               </div>
             </div>
@@ -396,32 +648,110 @@ export default function Portfolio() {
 
         {/* Search & Selection */}
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Search Indian Companies (NSE)</label>
-            <div className="relative w-full max-w-md">
-              <input
-                value={query}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search company (e.g. Reliance, TCS, HDFC)..."
-                className="border border-slate-200 px-3.5 py-2 rounded-lg w-full outline-none focus:border-slate-800 text-xs"
-              />
+          <div className="flex flex-wrap justify-between items-end gap-3">
+            <div className="space-y-1.5 flex-1 max-w-md">
+              <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Search Indian Companies (NSE)</label>
+              <div className="relative w-full">
+                <input
+                  value={query}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  placeholder="Search company (e.g. Reliance, TCS, HDFC)..."
+                  className="border border-slate-200 px-3.5 py-2 rounded-lg w-full outline-none focus:border-slate-800 text-xs"
+                />
 
-              {query && (
-                <div className="absolute bg-white border border-slate-200 mt-1 w-full max-h-48 overflow-y-auto rounded-lg shadow-lg z-50 divide-y divide-slate-100">
-                  {filtered.map((c, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => addCompany(c)}
-                      className="flex justify-between px-3.5 py-2 hover:bg-slate-50 cursor-pointer text-xs"
-                    >
-                      <span className="font-medium text-slate-900">{c.name}</span>
-                      <span className="text-blue-600 font-bold">+</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                {query && (
+                  <div className="absolute bg-white border border-slate-200 mt-1 w-full max-h-48 overflow-y-auto rounded-lg shadow-lg z-50 divide-y divide-slate-100">
+                    {filtered.map((c, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => addCompany(c)}
+                        className="flex justify-between px-3.5 py-2 hover:bg-slate-50 cursor-pointer text-xs"
+                      >
+                        <span className="font-medium text-slate-900">{c.name}</span>
+                        <span className="text-blue-600 font-bold">+</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+
+            <button
+              onClick={fetchAiRecommendations}
+              disabled={recsLoading || selected.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-1.5 font-mono disabled:opacity-50"
+            >
+              {recsLoading ? "Analyzing Sector Gaps..." : "AI: Suggest High-Alpha Stocks →"}
+            </button>
           </div>
+
+          {/* AI STOCK RECOMMENDATIONS CARD (IF TRIGGERED) */}
+          {aiRecommendations && (
+            <div className="p-4 bg-blue-50/50 border border-blue-200/80 rounded-xl space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-blue-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  <h4 className="text-xs font-bold text-slate-900 uppercase font-mono">
+                    AI Sector Gap Analysis & Suggested Additions
+                  </h4>
+                  <span className="text-[9px] font-bold bg-blue-900 text-white px-2 py-0.5 rounded font-mono">
+                    {aiRecommendations.powered_by || "Google Gemini"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setAiRecommendations(null)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-700 font-mono"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-700 leading-relaxed">
+                {aiRecommendations.sector_gap_analysis}
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                {aiRecommendations.recommendations?.map((rec: any, rIdx: number) => {
+                  const alreadyAdded = selected.some((s) => s.ticker === rec.ticker);
+                  return (
+                    <div
+                      key={rIdx}
+                      className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs space-y-2 flex flex-col justify-between"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 block">{rec.name || rec.ticker}</span>
+                            <span className="font-mono text-[10px] text-slate-500">{rec.sector}</span>
+                          </div>
+                          <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                            +{rec.expected_cagr}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug">{rec.rationale}</p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (!alreadyAdded) {
+                            addCompany({ name: rec.name || rec.ticker, ticker: rec.ticker });
+                          }
+                        }}
+                        disabled={alreadyAdded}
+                        className={`w-full py-1.5 rounded text-xs font-semibold transition-colors mt-2 ${
+                          alreadyAdded
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-900 hover:bg-slate-800 text-white shadow-xs"
+                        }`}
+                      >
+                        {alreadyAdded ? "In Portfolio" : "+ Add to Basket"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Selected Companies Tags */}
           <div>
@@ -485,15 +815,31 @@ export default function Portfolio() {
           </button>
         </div>
 
+        {/* ERROR STATE BANNER */}
+        {analysisError && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs flex items-center justify-between font-mono">
+            <div className="flex items-center gap-2">
+              <span className="font-bold uppercase text-[10px] bg-rose-200 px-1.5 py-0.5 rounded">Alert</span>
+              <span>{analysisError}</span>
+            </div>
+            <button
+              onClick={() => analyzePortfolio()}
+              className="px-3 py-1 bg-rose-600 text-white rounded font-semibold hover:bg-rose-700 transition-colors"
+            >
+              Retry Optimization
+            </button>
+          </div>
+        )}
+
         {/* RESULTS */}
-        {result && (
+        {result && result.optimal_weights && (
           <div className="space-y-6">
             {/* KPI Cards */}
             <div className="grid grid-cols-4 gap-6">
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Expected Return</p>
                 <h2 className="text-2xl font-bold text-emerald-600 mt-1">+{result.expected_return}%</h2>
-                <p className="text-[10px] text-slate-400 mt-1">Annualized return</p>
+                <p className="text-[10px] text-slate-400 mt-1">Annualized CAGR</p>
               </div>
 
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -511,13 +857,13 @@ export default function Portfolio() {
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Future Value</p>
                 <h2 className="text-2xl font-bold text-slate-900 mt-1">
-                  ₹{Number(result.future_value).toLocaleString()}
+                  ₹{Number(result.future_value || 0).toLocaleString()}
                 </h2>
                 <p className="text-[10px] text-slate-400 mt-1">In {years} years</p>
               </div>
             </div>
 
-            {/* 🔥 PHASE 6: GEMINI AI PORTFOLIO ALLOCATION INTELLIGENCE & REAL ASSET DIAGNOSTICS */}
+            {/* PHASE 6: GEMINI AI PORTFOLIO ALLOCATION INTELLIGENCE & REAL ASSET DIAGNOSTICS */}
             {(aiInsights || aiLoading) && (
               <AIPortfolioInsights
                 insights={aiInsights || ({} as any)}
@@ -529,24 +875,31 @@ export default function Portfolio() {
             {/* Action Buttons */}
             <div className="flex flex-wrap justify-between items-center bg-slate-50 border border-slate-200 p-5 rounded-xl gap-4">
               <div>
-                <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded uppercase">Next Stages</span>
+                <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded uppercase tracking-wider font-mono">Workflow Next</span>
                 <h4 className="font-bold text-slate-900 text-sm mt-1">Ready to test risk & execute this allocation?</h4>
                 <p className="text-slate-500 text-xs mt-0.5">Seamlessly carry these optimal weights into stochastic stress testing or tax rebalancing.</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <button
+                  onClick={handleDeployDirectOrders}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold font-mono transition-colors shadow-sm"
+                >
+                  1-Click Place Portfolio Orders →
+                </button>
+
+                <button
                   onClick={handleOpenSaveModal}
                   className="bg-white text-slate-800 border border-slate-300 px-3.5 py-2 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors"
                 >
-                  Save to Cloud
+                  Save Allocation
                 </button>
 
                 <Link
                   href="/compare"
                   className="bg-white text-slate-800 border border-slate-300 px-3.5 py-2 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors"
                 >
-                  👥 Compare vs. Peers
+                  Peer Benchmark
                 </Link>
 
                 <button
@@ -555,7 +908,7 @@ export default function Portfolio() {
                       "portfolio_data",
                       JSON.stringify({
                         tickers: selected.map((c) => c.ticker),
-                        weights: Object.values(result.optimal_weights).map((w: any) => w / 100),
+                        weights: Object.values(result.optimal_weights || {}).map((w: any) => w / 100),
                         investment: Number(investment),
                         years: Number(years),
                         expected_return: result.expected_return,
@@ -564,16 +917,16 @@ export default function Portfolio() {
                     );
                     router.push("/simulation");
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors shadow-sm"
                 >
-                  🎲 Step 3: Stress Test →
+                  Stage 03: Stress Engine →
                 </button>
 
                 <Link
                   href="/rebalance"
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-sm"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors shadow-sm"
                 >
-                  ⚖️ Step 4: Tax Rebalance →
+                  Stage 04: Tax Rebalance →
                 </Link>
               </div>
             </div>
@@ -594,7 +947,7 @@ export default function Portfolio() {
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="font-semibold text-xs text-slate-700 uppercase tracking-wider mb-3">Equal Allocation (Baseline)</h3>
                 <div className="divide-y divide-slate-100 text-xs">
-                  {Object.entries(result.weights).map(([k, v]: any) => (
+                  {Object.entries(result.weights || {}).map(([k, v]: any) => (
                     <div key={k} className="py-2 flex justify-between">
                       <span className="font-mono text-slate-600">{k}</span>
                       <span className="font-medium text-slate-800">{v}%</span>
@@ -606,7 +959,7 @@ export default function Portfolio() {
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="font-semibold text-xs text-slate-700 uppercase tracking-wider mb-3">Optimal Allocation (Markowitz SLSQP)</h3>
                 <div className="divide-y divide-slate-100 text-xs">
-                  {Object.entries(result.optimal_weights).map(([k, v]: any) => (
+                  {Object.entries(result.optimal_weights || {}).map(([k, v]: any) => (
                     <div key={k} className="py-2 flex justify-between">
                       <span className="font-mono text-slate-900 font-semibold">{k}</span>
                       <span className="font-bold text-blue-600">{v}%</span>
@@ -715,6 +1068,140 @@ export default function Portfolio() {
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        )}
+        {/* INTERACTIVE ORDER REVIEW & EDIT STAGING MODAL */}
+        {showOrderModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Review & Confirm Portfolio Orders</h2>
+                  <p className="text-xs text-slate-500">Edit quantities, adjust target prices, or switch weight distribution before executing.</p>
+                </div>
+                <button
+                  onClick={() => setShowOrderModal(false)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+
+              {/* Order Staging Table */}
+              <div className="space-y-3">
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-500 uppercase font-mono text-[10px] border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Security</th>
+                        <th className="py-2.5 px-2">Action</th>
+                        <th className="py-2.5 px-2">Quantity</th>
+                        <th className="py-2.5 px-2">Price (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Gross Total (₹)</th>
+                        <th className="py-2.5 px-2 text-center">Remove</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {stagedOrders.map((o, idx) => {
+                        const rowTotal = Math.round((Number(o.quantity) || 0) * (Number(o.price) || 0));
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-2.5 px-3">
+                              <span className="font-bold text-slate-900 block">{o.company_name}</span>
+                              <span className="font-mono text-[10px] text-slate-400">{o.ticker} ({o.weight_pct}%)</span>
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 font-mono">
+                                BUY
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <input
+                                type="number"
+                                min={1}
+                                value={o.quantity}
+                                onChange={(e) => {
+                                  const updated = [...stagedOrders];
+                                  updated[idx].quantity = Math.max(1, Number(e.target.value));
+                                  setStagedOrders(updated);
+                                }}
+                                className="w-20 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <input
+                                type="number"
+                                min={1}
+                                value={o.price}
+                                onChange={(e) => {
+                                  const updated = [...stagedOrders];
+                                  updated[idx].price = Number(e.target.value);
+                                  setStagedOrders(updated);
+                                }}
+                                className="w-24 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900">
+                              ₹{rowTotal.toLocaleString()}
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <button
+                                onClick={() => {
+                                  setStagedOrders(stagedOrders.filter((_, i) => i !== idx));
+                                }}
+                                className="text-slate-400 hover:text-rose-600 font-bold px-2 py-1"
+                                title="Remove stock"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Capital Summary */}
+                <div className="bg-slate-50 p-3.5 rounded-lg text-xs space-y-1.5 border border-slate-200 font-mono">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Basket Orders:</span>
+                    <span className="font-bold text-slate-900">{stagedOrders.length} securities</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Estimated Total Capital:</span>
+                    <span className="font-bold text-slate-900">
+                      ₹{stagedOrders.reduce((sum, o) => sum + Math.round((Number(o.quantity) || 0) * (Number(o.price) || 0)), 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Est. Brokerage & Taxes:</span>
+                    <span className="font-bold text-slate-500">
+                      ₹{Math.round(stagedOrders.reduce((sum, o) => sum + (Number(o.quantity) * Number(o.price) * 0.001), 0)).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowOrderModal(false)}
+                    className="px-4 py-2 border border-slate-200 text-xs font-semibold rounded-lg hover:bg-slate-50 text-slate-700"
+                  >
+                    Cancel / Edit In Studio
+                  </button>
+
+                  <button
+                    onClick={handleConfirmAndExecuteOrders}
+                    disabled={stagedOrders.length === 0}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold font-mono rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    Confirm & Execute {stagedOrders.length} Orders →
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

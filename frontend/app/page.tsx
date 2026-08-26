@@ -84,63 +84,63 @@ export default function Home() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* 🚀 BEGINNER-FRIENDLY QUICK LAUNCH CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* PROFESSIONAL WORKFLOW LAUNCH CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Pathway 1: Build Goal Portfolio */}
         <div
           onClick={() => router.push("/onboarding")}
-          className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl border border-slate-700 shadow-md cursor-pointer hover:border-blue-500 transition-all flex flex-col justify-between space-y-4 group"
+          className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800 shadow-sm cursor-pointer hover:border-slate-700 hover:bg-slate-900/90 transition-all flex flex-col justify-between space-y-4 group"
         >
           <div>
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded uppercase tracking-wider">
-                Guided Wizard
+              <span className="text-[10px] font-bold bg-blue-900/80 text-blue-300 border border-blue-700/60 px-2 py-0.5 rounded uppercase tracking-wider">
+                Goal Engineering
               </span>
-              <span className="text-blue-400 text-xs font-bold group-hover:translate-x-1 transition-transform">
-                Start Goal →
+              <span className="text-blue-400 text-xs font-semibold group-hover:translate-x-0.5 transition-transform">
+                Launch Wizard →
               </span>
             </div>
-            <h2 className="text-lg font-bold text-white mt-2">🎯 Build a Goal-Driven Portfolio</h2>
+            <h2 className="text-base font-bold text-white mt-3">Target-Driven Portfolio Builder</h2>
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              Define a financial target (e.g. ₹25 Lakhs) and automatically generate 3 optimal Markowitz baseline portfolios matching your risk tolerance.
+              Define a financial target (e.g. ₹25,00,000) and automatically generate 3 optimal Markowitz baseline allocations calibrated to target volatility and horizon.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-700/60 text-[11px] text-slate-400">
-            <span>✨ 3-Step Wizard</span>
-            <span>•</span>
-            <span>📈 Lumpsum / SIP</span>
-            <span>•</span>
-            <span>🎲 Goal Probability</span>
+          <div className="flex items-center gap-2 pt-3 border-t border-slate-800 text-[11px] text-slate-400 font-mono">
+            <span>3-Stage Setup</span>
+            <span className="text-slate-600">•</span>
+            <span>Lumpsum & SIP</span>
+            <span className="text-slate-600">•</span>
+            <span>Stochastic VaR</span>
           </div>
         </div>
 
         {/* Pathway 2: Import Existing Demat Holdings */}
         <div
           onClick={() => router.push("/import")}
-          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-slate-800 transition-all flex flex-col justify-between space-y-4 group"
+          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-slate-400 transition-all flex flex-col justify-between space-y-4 group"
         >
           <div>
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase tracking-wider">
-                Frictionless Import
+              <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded uppercase tracking-wider">
+                Holdings Ingestion
               </span>
-              <span className="text-slate-900 text-xs font-bold group-hover:translate-x-1 transition-transform">
+              <span className="text-slate-900 text-xs font-semibold group-hover:translate-x-0.5 transition-transform">
                 Import Demat →
               </span>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 mt-2">📥 Import & Optimize Existing Holdings</h2>
+            <h2 className="text-base font-bold text-slate-900 mt-3">Import & Analyze Demat Holdings</h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Zero file downloads. Copy-paste your holdings screen directly from Zerodha Kite, Groww, or AngelOne to run instant tax-loss and risk checks.
+              Direct clipboard ingestion from Zerodha Kite, Groww, or AngelOne. Instantly run Indian capital gains tax checks (Budget 2024) and SLSQP rebalancing.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 font-medium">
-            <span>📋 Clipboard Paste</span>
-            <span>•</span>
-            <span>⚖️ 2024 Tax Optimizer</span>
-            <span>•</span>
-            <span>⚡ 1-Click Kite Basket</span>
+          <div className="flex items-center gap-2 pt-3 border-t border-slate-100 text-[11px] text-slate-500 font-mono">
+            <span>Clipboard Parser</span>
+            <span className="text-slate-300">•</span>
+            <span>STCG / LTCG 2024</span>
+            <span className="text-slate-300">•</span>
+            <span>Broker Baskets</span>
           </div>
         </div>
       </div>
@@ -196,9 +196,9 @@ export default function Home() {
                 `/analysis?ticker=${ticker}&name=${companyName}`
               )
             }
-            className="border border-slate-200 text-slate-700 text-xs font-medium px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm"
           >
-            Full Analysis
+            AI Stock Radar & Copilot →
           </button>
         </div>
       </div>

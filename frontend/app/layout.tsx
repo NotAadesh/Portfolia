@@ -5,293 +5,127 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 
-function SidebarContent() {
+function TopNavbar() {
   const pathname = usePathname();
   const { user, logout, isLoading } = useAuth();
 
   const navItems = [
-    { label: "Dashboard", href: "/", icon: "🏠", badge: "" },
-    { label: "Stock Radar", href: "/analysis", icon: "🔍", badge: "AI" },
-    { label: "Portfolio Studio", href: "/portfolio", icon: "💼", badge: "CORE" },
-    { label: "My Portfolios", href: "/my-portfolios", icon: "📁", badge: "" },
+    { label: "Markets", href: "/" },
+    { label: "Stock Analysis", href: "/analysis", tag: "AI" },
+    { label: "Portfolio Studio", href: "/portfolio", tag: "CORE" },
+    { label: "Orders & P&L", href: "/orders", tag: "LIVE" },
+    { label: "Saved Portfolios", href: "/my-portfolios" },
   ];
 
   return (
-    <div
-      style={{
-        width: "250px",
-        backgroundColor: "#0b0f19",
-        color: "#f3f4f6",
-        padding: "24px 18px",
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-        overflowY: "auto",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        borderRight: "1px solid #1e293b",
-      }}
-    >
-      <div>
-        {/* Brand Header */}
-        <div style={{ marginBottom: "28px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                backgroundColor: "#2563eb",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: "700",
-                fontSize: "13px",
-                color: "#ffffff",
-                letterSpacing: "-0.5px",
-              }}
-            >
+    <header className="sticky top-0 z-50 bg-[#0b0f19] border-b border-slate-800/80 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+        {/* Brand & Market Sentinel */}
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2.5 text-decoration-none">
+            <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center font-bold text-xs text-white tracking-tight">
               P
             </div>
             <div>
-              <span
-                style={{
-                  fontSize: "17px",
-                  fontWeight: "700",
-                  letterSpacing: "-0.4px",
-                  color: "#ffffff",
-                }}
-              >
-                Portfolia
+              <span className="font-bold text-sm text-white tracking-tight uppercase">Portfolia</span>
+              <span className="ml-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider">
+                Institutional Terminal
               </span>
-              <p
-                style={{
-                  fontSize: "10px",
-                  color: "#64748b",
-                  margin: "1px 0 0 0",
-                  letterSpacing: "0.2px",
-                  textTransform: "uppercase",
-                  fontWeight: "600",
-                }}
-              >
-                Quantitative Terminal
-              </p>
             </div>
+          </Link>
+
+          <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 text-[10px] text-slate-300 font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>NSE LIVE</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">SLSQP SOLVER ACTIVE</span>
           </div>
         </div>
 
         {/* Navigation Links */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        <nav className="hidden md:flex items-center gap-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                style={{
-                  padding: "9px 12px",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                  fontWeight: isActive ? "600" : "400",
-                  backgroundColor: isActive ? "#1e293b" : "transparent",
-                  color: isActive ? "#ffffff" : "#94a3b8",
-                  textDecoration: "none",
-                  transition: "all 0.15s ease",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                  isActive
+                    ? "bg-slate-800 text-white font-semibold shadow-inner"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+                }`}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "14px" }}>{item.icon}</span>
-                  <span style={{ fontSize: "13px" }}>{item.label}</span>
-                  {item.badge && (
-                    <span
-                      style={{
-                        fontSize: "8px",
-                        fontWeight: "700",
-                        color: "#38bdf8",
-                        backgroundColor: "rgba(56, 189, 248, 0.12)",
-                        padding: "1px 5px",
-                        borderRadius: "3px",
-                      }}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-                {!user &&
-                  (item.href === "/portfolio" ||
-                    item.href === "/my-portfolios") && (
-                    <span
-                      style={{
-                        fontSize: "9px",
-                        fontWeight: "600",
-                        color: "#64748b",
-                        backgroundColor: "#1e293b",
-                        padding: "1px 5px",
-                        borderRadius: "4px",
-                        letterSpacing: "0.4px",
-                      }}
-                    >
-                      LOCK
-                    </span>
-                  )}
+                <span>{item.label}</span>
+                {item.tag && (
+                  <span className="text-[8px] font-bold px-1.5 py-0.2 rounded bg-blue-950 text-blue-400 border border-blue-800/60">
+                    {item.tag}
+                  </span>
+                )}
               </Link>
             );
           })}
 
-          {/* Superadmin Panel Link */}
           {user && (user.role === "superadmin" || user.role === "admin") && (
             <Link
               href="/admin"
-              style={{
-                marginTop: "8px",
-                padding: "9px 12px",
-                borderRadius: "6px",
-                fontSize: "13px",
-                fontWeight: pathname === "/admin" ? "700" : "500",
-                backgroundColor: pathname === "/admin" ? "#991b1b" : "rgba(153, 27, 27, 0.15)",
-                color: pathname === "/admin" ? "#ffffff" : "#fca5a5",
-                textDecoration: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                border: "1px solid rgba(153, 27, 27, 0.3)",
-              }}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                pathname === "/admin"
+                  ? "bg-rose-900 text-white"
+                  : "text-rose-400 hover:bg-rose-950/40"
+              }`}
             >
-              <span>Administration</span>
-              <span
-                style={{
-                  fontSize: "9px",
-                  fontWeight: "700",
-                  backgroundColor: "#dc2626",
-                  color: "white",
-                  padding: "1px 5px",
-                  borderRadius: "4px",
-                  textTransform: "uppercase",
-                }}
-              >
-                Root
-              </span>
+              Admin
             </Link>
+          )}
+        </nav>
+
+        {/* User Account Controls */}
+        <div className="flex items-center gap-3">
+          {isLoading ? (
+            <span className="text-xs text-slate-500 font-mono">Authenticating...</span>
+          ) : user ? (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded bg-slate-800 border border-slate-700 text-slate-200 flex items-center justify-center text-xs font-bold font-mono">
+                  {user.full_name ? user.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <div className="text-xs font-semibold text-slate-200 leading-none">
+                    {user.full_name || user.email.split("@")[0]}
+                  </div>
+                  <span className="text-[9px] uppercase font-bold text-blue-400">
+                    {user.role}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={logout}
+                className="px-2.5 py-1 text-[11px] font-medium text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 rounded transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                href="/login"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white hover:bg-slate-100 rounded-md transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/signup"
+                className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white border border-slate-800 hover:bg-slate-900 rounded-md transition-colors"
+              >
+                Register
+              </Link>
+            </div>
           )}
         </div>
       </div>
-
-      {/* User Session Footer */}
-      <div style={{ borderTop: "1px solid #1e293b", paddingTop: "14px", marginTop: "20px" }}>
-        {isLoading ? (
-          <div style={{ fontSize: "11px", color: "#64748b" }}>Authenticating...</div>
-        ) : user ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-              <div
-                style={{
-                  width: "32px",
-                  height: "32px",
-                  borderRadius: "6px",
-                  backgroundColor: "#1e293b",
-                  border: "1px solid #334155",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  color: "#cbd5e1",
-                }}
-              >
-                {user.full_name ? user.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
-              </div>
-              <div style={{ overflow: "hidden", flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    color: "#f1f5f9",
-                    whiteSpace: "nowrap",
-                    textOverflow: "ellipsis",
-                    overflow: "hidden",
-                  }}
-                >
-                  {user.full_name || user.email.split("@")[0]}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                  <span
-                    style={{
-                      fontSize: "9px",
-                      padding: "1px 5px",
-                      borderRadius: "3px",
-                      backgroundColor: user.role === "superadmin" ? "#dc2626" : "#2563eb",
-                      color: "white",
-                      fontWeight: "700",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {user.role}
-                  </span>
-                  <span style={{ fontSize: "10px", color: "#64748b" }}>Verified</span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={logout}
-              style={{
-                width: "100%",
-                padding: "7px 10px",
-                borderRadius: "6px",
-                fontSize: "11px",
-                fontWeight: "500",
-                backgroundColor: "transparent",
-                color: "#94a3b8",
-                border: "1px solid #1e293b",
-                cursor: "pointer",
-                textAlign: "center",
-                transition: "all 0.15s ease",
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <Link
-              href="/login"
-              style={{
-                display: "block",
-                padding: "8px 10px",
-                borderRadius: "6px",
-                fontSize: "12px",
-                fontWeight: "600",
-                backgroundColor: "#ffffff",
-                color: "#0b0f19",
-                textAlign: "center",
-                textDecoration: "none",
-              }}
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/signup"
-              style={{
-                display: "block",
-                padding: "7px 10px",
-                borderRadius: "6px",
-                fontSize: "12px",
-                color: "#94a3b8",
-                textAlign: "center",
-                textDecoration: "none",
-                border: "1px solid #1e293b",
-              }}
-            >
-              Create Account
-            </Link>
-          </div>
-        )}
-      </div>
-    </div>
+    </header>
   );
 }
 
@@ -302,29 +136,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        style={{
-          display: "flex",
-          minHeight: "100vh",
-          margin: 0,
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-          backgroundColor: "#f8fafc",
-          color: "#0f172a",
-        }}
-      >
+      <body className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased flex flex-col">
         <AuthProvider>
-          <SidebarContent />
-          <div
-            style={{
-              flex: 1,
-              padding: "28px 36px",
-              backgroundColor: "#f8fafc",
-              minHeight: "100vh",
-              overflowY: "auto",
-            }}
-          >
+          <TopNavbar />
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {children}
-          </div>
+          </main>
         </AuthProvider>
       </body>
     </html>
