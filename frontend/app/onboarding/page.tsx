@@ -65,7 +65,7 @@ export default function GoalOnboarding() {
     localStorage.setItem(
       "portfolio_data",
       JSON.stringify({
-        goal_name: goalName,
+        goal_name: `${goalName} (${selectedProfile})`,
         goal_amount: goalAmount,
         investment: investmentMode === "SIP" ? initialCapital + monthlySip * 12 : initialCapital,
         years: horizonYears,
@@ -73,6 +73,7 @@ export default function GoalOnboarding() {
         volatility: portfolio.volatility,
         tickers: tickers,
         weights: weights,
+        assets: portfolio.assets,
       })
     );
 

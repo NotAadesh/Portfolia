@@ -223,6 +223,52 @@ export default function Simulation() {
 
   const [showSimOrderModal, setShowSimOrderModal] = useState(false);
   const [stagedSimOrders, setStagedSimOrders] = useState<any[]>([]);
+  const [simWeightMode, setSimWeightMode] = useState<"OPTIMAL" | "EQUAL">("OPTIMAL");
+  const [cachedSimPriceMap, setCachedSimPriceMap] = useState<Record<string, number>>({});
+
+  const handleSwitchSimWeightSplit = (mode: "OPTIMAL" | "EQUAL") => {
+    setSimWeightMode(mode);
+    if (!tickers || tickers.length === 0) return;
+    const totalCap = Number(amount) || 100000;
+
+    const staged: any[] = [];
+    if (mode === "OPTIMAL") {
+      const equalWeight = 1.0 / tickers.length;
+      tickers.forEach((ticker) => {
+        const alloc = Math.round(totalCap * equalWeight);
+        const ltp = cachedSimPriceMap[ticker] || 1500;
+        const qty = Math.max(1, Math.floor(alloc / ltp));
+        const companyName = ticker.replace(".NS", "");
+
+        staged.push({
+          ticker,
+          company_name: companyName,
+          action: "BUY",
+          quantity: qty,
+          price: ltp,
+          weight_pct: Math.round(equalWeight * 100),
+        });
+      });
+    } else {
+      const equalWeight = 1.0 / tickers.length;
+      tickers.forEach((ticker) => {
+        const alloc = Math.round(totalCap * equalWeight);
+        const ltp = cachedSimPriceMap[ticker] || 1500;
+        const qty = Math.max(1, Math.floor(alloc / ltp));
+        const companyName = ticker.replace(".NS", "");
+
+        staged.push({
+          ticker,
+          company_name: companyName,
+          action: "BUY",
+          quantity: qty,
+          price: ltp,
+          weight_pct: Math.round(equalWeight * 100),
+        });
+      });
+    }
+    setStagedSimOrders(staged);
+  };
 
   const handleDeploySimulatedOrders = async () => {
     if (!tickers || tickers.length === 0) return;
@@ -926,6 +972,35 @@ export default function Simulation() {
               </div>
 
 
+              {/* Weight Split Strategy Selector */}
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                <span className="text-xs font-mono font-bold text-slate-700">Allocation Mode:</span>
+                <div className="flex items-center gap-1.5 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchSimWeightSplit("OPTIMAL")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      simWeightMode === "OPTIMAL"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    🎯 Optimal Risk Split
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchSimWeightSplit("EQUAL")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      simWeightMode === "EQUAL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    ⚖️ Equal Split (1/N)
+                  </button>
+                </div>
+              </div>
+
               {/* Order Staging Table */}
               <div className="space-y-3">
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -961,8 +1036,16 @@ export default function Simulation() {
                                 value={o.quantity}
                                 onChange={(e) => {
                                   const updated = [...stagedSimOrders];
-                                  updated[idx].quantity = Math.max(1, Number(e.target.value));
+                                  const val = e.target.value;
+                                  updated[idx].quantity = val === "" ? ("" as any) : Number(val);
                                   setStagedSimOrders(updated);
+                                }}
+                                onBlur={() => {
+                                  const updated = [...stagedSimOrders];
+                                  if (!updated[idx].quantity || Number(updated[idx].quantity) <= 0) {
+                                    updated[idx].quantity = 1;
+                                    setStagedSimOrders(updated);
+                                  }
                                 }}
                                 className="w-20 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
                               />
@@ -974,8 +1057,16 @@ export default function Simulation() {
                                 value={o.price}
                                 onChange={(e) => {
                                   const updated = [...stagedSimOrders];
-                                  updated[idx].price = Number(e.target.value);
+                                  const val = e.target.value;
+                                  updated[idx].price = val === "" ? ("" as any) : Number(val);
                                   setStagedSimOrders(updated);
+                                }}
+                                onBlur={() => {
+                                  const updated = [...stagedSimOrders];
+                                  if (!updated[idx].price || Number(updated[idx].price) <= 0) {
+                                    updated[idx].price = 1;
+                                    setStagedSimOrders(updated);
+                                  }
                                 }}
                                 className="w-24 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
                               />

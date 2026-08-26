@@ -5,6 +5,7 @@ import Link from "next/link";
 import AuthTeaserGate from "@/components/AuthTeaserGate";
 import { useAuth } from "@/context/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
+import { getIndianMarketStatus, MarketStatus } from "@/lib/marketHours";
 
 interface Position {
   ticker: string;
@@ -101,14 +102,27 @@ export default function OrdersAndPnLPage() {
   const [realizedPnL, setRealizedPnL] = useState<number>(0);
   const [isSyncingQuotes, setIsSyncingQuotes] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [marketStatus, setMarketStatus] = useState<MarketStatus>(getIndianMarketStatus());
+
+  // Check market hours periodically
+  useEffect(() => {
+    const updateMarket = () => setMarketStatus(getIndianMarketStatus());
+    updateMarket();
+    const interval = setInterval(updateMarket, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Direct Order Placement Form State
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [orderTicker, setOrderTicker] = useState("RELIANCE.NS");
   const [orderName, setOrderName] = useState("Reliance Industries");
-  const [orderPrice, setOrderPrice] = useState<number>(2980);
-  const [orderQuantity, setOrderQuantity] = useState<number>(5);
+  const [orderPrice, setOrderPrice] = useState<number>(2980.5);
+  const [liveLTP, setLiveLTP] = useState<number>(2980.5);
+  const [isFetchingLTP, setIsFetchingLTP] = useState(false);
+  const [orderInputMode, setOrderInputMode] = useState<"AMOUNT" | "QUANTITY">("AMOUNT");
+  const [customInvestAmount, setCustomInvestAmount] = useState<number | "">(10000);
+  const [orderQuantity, setOrderQuantity] = useState<number | "">(3);
   const [orderAction, setOrderAction] = useState<"BUY" | "SELL">("BUY");
   const [orderPortfolioTag, setOrderPortfolioTag] = useState("Direct Demat Orders");
   const [isPlacing, setIsPlacing] = useState(false);
@@ -117,7 +131,7 @@ export default function OrdersAndPnLPage() {
   // Direct 1-Click Sell / Exit Holding Modal State
   const [showQuickSellModal, setShowQuickSellModal] = useState(false);
   const [sellingPosition, setSellingPosition] = useState<Position | null>(null);
-  const [quickSellQuantity, setQuickSellQuantity] = useState<number>(1);
+  const [quickSellQuantity, setQuickSellQuantity] = useState<number | "">(1);
   const [quickSellPrice, setQuickSellPrice] = useState<number>(0);
   const [isExecutingQuickSell, setIsExecutingQuickSell] = useState(false);
 
@@ -336,25 +350,74 @@ export default function OrdersAndPnLPage() {
     return () => clearInterval(interval);
   }, [positions.length, user]);
 
+  // Fetch real-time live trading price for the selected ticker
+  const fetchLiveStockPrice = async (ticker: string) => {
+    setIsFetchingLTP(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/stocks/quotes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: [ticker] }),
+      });
+      if (res.ok) {
+        const quotes = await res.json();
+        const q = quotes[ticker] || quotes[`${ticker}.NS`] || Object.values(quotes)[0];
+        if (q && q.current_price) {
+          const ltp = Number(q.current_price);
+          setLiveLTP(ltp);
+          setOrderPrice(ltp);
+          if (orderInputMode === "AMOUNT") {
+            const calculatedQty = Math.max(1, Math.floor(customInvestAmount / ltp));
+            setOrderQuantity(calculatedQty);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch live LTP:", e);
+    } finally {
+      setIsFetchingLTP(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveStockPrice(orderTicker);
+  }, [orderTicker]);
+
+  // Handle Capital Amount Change with Automatic Share Quantity Calculation
+  const handleCustomAmountChange = (valStr: string) => {
+    if (valStr === "") {
+      setCustomInvestAmount("");
+      setOrderQuantity("");
+      return;
+    }
+    const amountVal = Math.max(0, parseFloat(valStr) || 0);
+    setCustomInvestAmount(amountVal);
+    const p = liveLTP || orderPrice || 1000;
+    const calculatedQty = Math.max(1, Math.floor(amountVal / p));
+    setOrderQuantity(calculatedQty);
+  };
+
+  // Handle Share Quantity Change with Automatic Capital Calculation
+  const handleQuantityChange = (valStr: string) => {
+    if (valStr === "") {
+      setOrderQuantity("");
+      setCustomInvestAmount("");
+      return;
+    }
+    const qty = Math.max(1, parseInt(valStr) || 1);
+    setOrderQuantity(qty);
+    const p = liveLTP || orderPrice || 1000;
+    setCustomInvestAmount(Math.round(qty * p));
+  };
+
   // Update Stock Selection in Order Form with Instant Real-Time Quote
   const handleSelectStock = async (stock: any) => {
     setOrderTicker(stock.ticker);
     setOrderName(stock.name);
-    setOrderPrice(stock.price);
     setIsDropdownOpen(false);
     setSearchQuery("");
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/stocks/quote/${encodeURIComponent(stock.ticker)}`);
-      if (res.ok) {
-        const q = await res.json();
-        if (q && q.current_price) {
-          setOrderPrice(Number(q.current_price));
-        }
-      }
-    } catch (e) {
-      console.warn("Could not fetch live single quote:", e);
-    }
+    await fetchLiveStockPrice(stock.ticker);
   };
 
   // Open Direct Quick Sell Modal from table
@@ -379,6 +442,10 @@ export default function OrdersAndPnLPage() {
 
   // Execute Direct Sell from Modal
   const handleConfirmQuickSell = () => {
+    if (!marketStatus.isOpen) {
+      alert(`Market is currently closed! Demat sell orders can only be executed during live NSE/BSE trading hours (Monday to Friday, 09:15 AM to 03:30 PM IST).\nCurrent time: ${marketStatus.currentTimeIST}`);
+      return;
+    }
     if (!user || !sellingPosition) return;
     const sellQty = Math.min(sellingPosition.quantity, Math.max(1, quickSellQuantity));
     const price = Number(quickSellPrice) || sellingPosition.current_price;
@@ -461,6 +528,10 @@ export default function OrdersAndPnLPage() {
   // Place Direct Order Handler from Side Desk
   const handlePlaceDirectOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!marketStatus.isOpen) {
+      alert(`Market is currently closed! Live orders can only be placed during NSE/BSE trading hours (Monday to Friday, 09:15 AM to 03:30 PM IST).\nCurrent time: ${marketStatus.currentTimeIST}`);
+      return;
+    }
     if (!user) {
       alert("Please sign in to place live demat orders.");
       return;
@@ -468,7 +539,8 @@ export default function OrdersAndPnLPage() {
     if (orderQuantity <= 0 || orderPrice <= 0) return;
 
     setIsPlacing(true);
-    const orderValue = Math.round(orderQuantity * orderPrice * 100) / 100;
+    const execPrice = liveLTP || orderPrice || 1000;
+    const orderValue = Math.round(orderQuantity * execPrice * 100) / 100;
     const brokerage = Math.min(20, Math.round(orderValue * 0.0003 * 100) / 100);
     const stt = Math.round(orderValue * 0.001 * 100) / 100;
     const now = new Date();
@@ -481,7 +553,7 @@ export default function OrdersAndPnLPage() {
       company_name: orderName,
       action: orderAction,
       quantity: Number(orderQuantity),
-      executed_price: Number(orderPrice),
+      executed_price: Number(execPrice),
       order_value: orderValue,
       brokerage,
       stt,
@@ -940,12 +1012,32 @@ export default function OrdersAndPnLPage() {
         {/* DIRECT ORDER PLACEMENT DESK */}
         <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-4 flex flex-col justify-between">
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-              <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider font-mono">
-                Direct Order Placement Desk
-              </h3>
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${marketStatus.isOpen ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}></span>
+                <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider font-mono">
+                  Direct Order Desk
+                </h3>
+              </div>
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                marketStatus.isOpen ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+              }`}>
+                {marketStatus.isOpen ? "🟢 NSE Live" : "🔴 Market Closed"}
+              </span>
             </div>
+
+            {/* Market Closed Advisory Banner */}
+            {!marketStatus.isOpen && (
+              <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs font-mono text-amber-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-amber-800 text-[11px]">
+                  <span>⏰</span>
+                  <span>NSE/BSE Markets Closed</span>
+                </div>
+                <p className="text-[10px] text-amber-700 leading-relaxed">
+                  Trading is disabled after market close. Normal hours: <b>Mon–Fri, 09:15 AM – 03:30 PM IST</b>. {marketStatus.nextOpenTime ? `Opens ${marketStatus.nextOpenTime}.` : ""}
+                </p>
+              </div>
+            )}
 
             {/* SEARCHABLE NSE STOCK SELECTOR */}
             <div className="space-y-1.5 relative">
@@ -1020,10 +1112,23 @@ export default function OrdersAndPnLPage() {
 
             <form onSubmit={handlePlaceDirectOrder} className="space-y-3.5 pt-1">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Selected Company / Ticker</label>
-                <div className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-mono font-bold text-slate-900 flex justify-between items-center">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[11px] font-bold text-slate-600 block">Selected Company / Ticker</label>
+                  <button
+                    type="button"
+                    onClick={() => fetchLiveStockPrice(orderTicker)}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-mono font-bold flex items-center gap-1"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    {isFetchingLTP ? "Syncing..." : "Refresh Live LTP"}
+                  </button>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-xs font-mono font-bold text-slate-900 flex justify-between items-center">
                   <span>{orderName} ({orderTicker})</span>
-                  <span className="text-blue-600 font-semibold">₹{orderPrice}</span>
+                  <div className="text-right">
+                    <span className="text-blue-600 font-bold block">₹{liveLTP.toLocaleString()}</span>
+                    <span className="text-[9px] text-slate-400 font-normal">Real-Time LTP</span>
+                  </div>
                 </div>
               </div>
 
@@ -1053,33 +1158,126 @@ export default function OrdersAndPnLPage() {
                 </button>
               </div>
 
-              {/* Quantity & Execution Price */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Quantity</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={orderQuantity}
-                    onChange={(e) => setOrderQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="border border-slate-200 px-3 py-2 rounded-xl w-full text-xs font-mono font-bold outline-none focus:border-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Price (₹)</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="1"
-                    required
-                    value={orderPrice}
-                    onChange={(e) => setOrderPrice(parseFloat(e.target.value) || 1)}
-                    className="border border-slate-200 px-3 py-2 rounded-xl w-full text-xs font-mono font-bold outline-none focus:border-slate-800"
-                  />
-                </div>
+              {/* Input Mode Selector: By Capital Amount vs By Share Quantity */}
+              <div className="bg-slate-50 p-1 rounded-xl border border-slate-200 grid grid-cols-2 gap-1 font-mono text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderInputMode("AMOUNT");
+                    const p = liveLTP || orderPrice || 1000;
+                    setOrderQuantity(Math.max(1, Math.floor(customInvestAmount / p)));
+                  }}
+                  className={`py-1.5 rounded-lg font-bold transition-all ${
+                    orderInputMode === "AMOUNT"
+                      ? "bg-white text-blue-600 shadow-xs border border-slate-200"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  💰 By Capital Amount (₹)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderInputMode("QUANTITY")}
+                  className={`py-1.5 rounded-lg font-bold transition-all ${
+                    orderInputMode === "QUANTITY"
+                      ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  📦 By Number of Shares
+                </button>
               </div>
+
+              {/* Dynamic Inputs Based on Selected Mode */}
+              {orderInputMode === "AMOUNT" ? (
+                <div className="space-y-2 bg-blue-50/40 p-3 rounded-xl border border-blue-100">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold text-slate-700 block">Custom Capital to Invest (₹)</label>
+                    <span className="text-[10px] font-mono text-blue-700 font-semibold">
+                      Auto-calculates shares @ live price
+                    </span>
+                  </div>
+                  
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-slate-400 font-mono font-bold text-xs">₹</span>
+                    <input
+                      type="number"
+                      step="100"
+                      min="1"
+                      required
+                      value={customInvestAmount}
+                      onChange={(e) => handleCustomAmountChange(e.target.value)}
+                      onBlur={() => {
+                        if (customInvestAmount === "" || customInvestAmount <= 0) {
+                          handleCustomAmountChange("5000");
+                        }
+                      }}
+                      placeholder="Type amount (e.g. 50000)"
+                      className="border border-blue-200 bg-white pl-7 pr-3 py-2 rounded-xl w-full text-xs font-mono font-bold outline-none focus:border-blue-600 text-slate-900 shadow-xs"
+                    />
+                  </div>
+
+                  {/* Auto-Calculated Share Breakdown Card */}
+                  <div className="bg-white p-2.5 rounded-lg border border-blue-200/80 font-mono text-xs flex justify-between items-center shadow-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block uppercase">Auto-Calculated Shares</span>
+                      <span className="font-bold text-emerald-600 text-sm">{orderQuantity || 0} Shares</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 block uppercase">Live Execution Price</span>
+                      <span className="font-bold text-slate-900">₹{liveLTP.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Number of Shares</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={orderQuantity}
+                      onChange={(e) => handleQuantityChange(e.target.value)}
+                      onBlur={() => {
+                        if (orderQuantity === "" || Number(orderQuantity) <= 0) {
+                          handleQuantityChange("1");
+                        }
+                      }}
+                      placeholder="e.g. 50"
+                      className="border border-slate-200 px-3 py-2 rounded-xl w-full text-xs font-mono font-bold outline-none focus:border-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Live Market Price (₹)</label>
+                    <div className="border border-slate-200 bg-slate-50 px-3 py-2 rounded-xl w-full text-xs font-mono font-bold text-slate-900 flex justify-between items-center">
+                      <span>₹{liveLTP.toLocaleString()}</span>
+                      <span className="text-[9px] text-emerald-600 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">LTP</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Capital Preset Buttons */}
+              {orderInputMode === "AMOUNT" && (
+                <div className="flex gap-1.5 font-mono text-[10px]">
+                  {[5000, 10000, 25000, 50000, 100000].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => handleCustomAmountChange(preset.toString())}
+                      className={`px-2 py-1 rounded-md border transition-all ${
+                        customInvestAmount === preset
+                          ? "bg-blue-600 text-white border-blue-600 font-bold"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      ₹{(preset / 1000).toFixed(0)}k
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Portfolio Tag */}
               <div>
@@ -1101,25 +1299,31 @@ export default function OrdersAndPnLPage() {
                 <div className="flex justify-between">
                   <span>Gross Order Value:</span>
                   <span className="font-bold text-slate-900">
-                    ₹{(orderQuantity * orderPrice).toLocaleString()}
+                    ₹{(orderQuantity * liveLTP).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400">
                   <span>Est. Brokerage & STT (0.1%):</span>
-                  <span>₹{(Math.min(20, orderQuantity * orderPrice * 0.0003) + orderQuantity * orderPrice * 0.001).toFixed(2)}</span>
+                  <span>₹{((orderQuantity * liveLTP) * 0.0013).toFixed(2)}</span>
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={isPlacing}
+                disabled={isPlacing || !marketStatus.isOpen}
                 className={`w-full py-2.5 rounded-xl text-xs font-bold font-mono text-white transition-colors shadow-sm ${
-                  orderAction === "BUY"
+                  !marketStatus.isOpen
+                    ? "bg-slate-400 cursor-not-allowed text-slate-200"
+                    : orderAction === "BUY"
                     ? "bg-slate-900 hover:bg-slate-800"
                     : "bg-rose-600 hover:bg-rose-700"
                 }`}
               >
-                {isPlacing ? "Processing Order..." : `Confirm & Execute ${orderAction} Order →`}
+                {!marketStatus.isOpen
+                  ? "🔒 Market Closed (Trading Disabled)"
+                  : isPlacing
+                  ? "Processing Order..."
+                  : `Confirm & Execute ${orderAction} Order →`}
               </button>
             </form>
 
@@ -1400,7 +1604,20 @@ export default function OrdersAndPnLPage() {
                   min="1"
                   max={sellingPosition.quantity}
                   value={quickSellQuantity}
-                  onChange={(e) => setQuickSellQuantity(Math.min(sellingPosition.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "") {
+                      setQuickSellQuantity("");
+                    } else {
+                      const num = parseInt(val) || 1;
+                      setQuickSellQuantity(Math.min(sellingPosition.quantity, Math.max(1, num)));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (quickSellQuantity === "" || Number(quickSellQuantity) <= 0) {
+                      setQuickSellQuantity(1);
+                    }
+                  }}
                   className="border border-slate-200 px-3.5 py-2 rounded-xl text-sm font-mono font-bold w-full outline-none focus:border-slate-900"
                 />
               </div>
@@ -1477,10 +1694,18 @@ export default function OrdersAndPnLPage() {
               <button
                 type="button"
                 onClick={handleConfirmQuickSell}
-                disabled={isExecutingQuickSell}
-                className="flex-2 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold font-mono transition-colors shadow-sm disabled:opacity-50"
+                disabled={isExecutingQuickSell || !marketStatus.isOpen}
+                className={`flex-2 py-2.5 rounded-xl text-xs font-bold font-mono transition-colors shadow-sm text-white ${
+                  !marketStatus.isOpen
+                    ? "bg-slate-400 cursor-not-allowed"
+                    : "bg-rose-600 hover:bg-rose-700"
+                }`}
               >
-                {isExecutingQuickSell ? "Executing Sale..." : `Confirm & Sell ${quickSellQuantity} Shares Now →`}
+                {!marketStatus.isOpen
+                  ? "🔒 Market Closed"
+                  : isExecutingQuickSell
+                  ? "Selling..."
+                  : `Sell ${quickSellQuantity || 1} Shares Now →`}
               </button>
             </div>
           </div>

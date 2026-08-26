@@ -307,13 +307,20 @@ function CompareContent() {
 
   // PEER COMPARISON FETCH
   const fetchPeerComparison = async (token = compareIdParam) => {
+    if (!token || token === "default" || token === "null" || token === "undefined") {
+      return;
+    }
     setPeerLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/v1/lifecycle/compare/${token}`);
-      const result = await res.json();
-      setPeerData(result);
+      if (res.ok) {
+        const result = await res.json();
+        setPeerData(result);
+      } else {
+        console.warn(`Peer comparison token ${token} returned ${res.status}`);
+      }
     } catch (err) {
-      console.error("Comparison fetch failed:", err);
+      console.warn("Comparison fetch notice:", err);
     } finally {
       setPeerLoading(false);
     }
@@ -336,7 +343,10 @@ function CompareContent() {
         }
       }
     } catch {}
-    fetchPeerComparison(compareIdParam);
+
+    if (compareIdParam && compareIdParam !== "default") {
+      fetchPeerComparison(compareIdParam);
+    }
   }, [compareIdParam]);
 
   const handleTogglePortfolio = (idStr: string) => {

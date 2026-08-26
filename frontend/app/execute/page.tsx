@@ -3,15 +3,17 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function BrokerExecutionPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [basketData, setBasketData] = useState<any>(null);
   const [copiedKite, setCopiedKite] = useState(false);
   const [copiedAngel, setCopiedAngel] = useState(false);
 
   // Direct In-Page Order Execution State
-  const [brokerMode, setBrokerMode] = useState<"PAPER_SIMULATION" | "ZERODHA_KITE" | "ANGELONE">("PAPER_SIMULATION");
+  const [brokerMode, setBrokerMode] = useState<"PAPER_SIMULATION" | "ZERODHA_KITE" | "ANGELONE" | "GROWW" | "UPSTOX">("PAPER_SIMULATION");
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionReceipt, setExecutionReceipt] = useState<any>(null);
 
@@ -22,6 +24,7 @@ export default function BrokerExecutionPage() {
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
   const [activeHoldings, setActiveHoldings] = useState<any[]>([]);
   const [activeTargetWeights, setActiveTargetWeights] = useState<Record<string, number>>({});
+  const [platformFeed, setPlatformFeed] = useState<string>("IN_APP_DEMAT");
 
   // Fallback defaults
   const defaultOrders = [
@@ -59,8 +62,17 @@ export default function BrokerExecutionPage() {
       const storedOrders = localStorage.getItem("rebalance_orders");
       if (storedOrders) orders = JSON.parse(storedOrders);
 
-      const storedHoldings = localStorage.getItem("imported_holdings");
-      if (storedHoldings) holdings = JSON.parse(storedHoldings);
+      const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
+      const liveUserPos = localStorage.getItem(userPositionsKey);
+      if (liveUserPos) {
+        const parsed = JSON.parse(liveUserPos);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          holdings = parsed;
+        }
+      } else {
+        const storedHoldings = localStorage.getItem("imported_holdings");
+        if (storedHoldings) holdings = JSON.parse(storedHoldings);
+      }
 
       const bState = localStorage.getItem("portfolio_builder_state");
       if (bState) {
@@ -111,7 +123,7 @@ export default function BrokerExecutionPage() {
 
   useEffect(() => {
     loadBasketAndSentinel();
-  }, []);
+  }, [user]);
 
   // 60-Second Real-Time Pulse Timer
   useEffect(() => {
@@ -128,7 +140,7 @@ export default function BrokerExecutionPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [sentinelActive, activeHoldings, activeTargetWeights]);
+  }, [sentinelActive, activeHoldings, activeTargetWeights, platformFeed]);
 
   const triggerSentinelScan = async () => {
     try {
@@ -151,18 +163,107 @@ export default function BrokerExecutionPage() {
   const handleDirectExecute = async () => {
     setIsExecuting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/lifecycle/execute/direct-order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orders: activeOrders.length > 0 ? activeOrders : defaultOrders,
-          broker_mode: brokerMode,
-        }),
-      });
-      const data = await res.json();
-      setExecutionReceipt(data);
+      const now = new Date();
+      const formattedTime = now.toISOString().replace("T", " ").substring(0, 19);
+      const userOrdersKey = `user_${user?.id || "guest"}_order_history`;
+      const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
 
-      // Re-trigger sentinel to show newly balanced state
+      const existingOrders = JSON.parse(localStorage.getItem(userOrdersKey) || "[]");
+      const existingPositions = JSON.parse(localStorage.getItem(userPositionsKey) || "[]");
+
+      const posMap = new Map<string, any>();
+      existingPositions.forEach((p: any) => posMap.set(p.ticker, { ...p }));
+
+      const executedList: any[] = [];
+      let totalTradedVal = 0;
+
+      activeOrders.forEach((o) => {
+        const p = Number(o.current_price || o.executed_price || 1000);
+        const q = Number(o.quantity || 1);
+        const val = Math.round(q * p * 100) / 100;
+        const brokerage = Math.min(20, Math.round(val * 0.0003 * 100) / 100);
+        const stt = Math.round(val * 0.001 * 100) / 100;
+        const orderId = `ORD-DIR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+        totalTradedVal += val;
+
+        executedList.push({
+          order_id: orderId,
+          ticker: o.ticker,
+          company_name: o.company_name || o.ticker.replace(".NS", ""),
+          action: o.action || "BUY",
+          quantity: q,
+          executed_price: p,
+          order_value: val,
+          brokerage,
+          stt,
+          status: "FILLED",
+          execution_time: formattedTime,
+          broker_mode: brokerMode,
+          portfolio_name: "Direct Execution Basket",
+        });
+
+        if (o.action === "SELL") {
+          if (posMap.has(o.ticker)) {
+            const cur = posMap.get(o.ticker);
+            const rem = Math.max(0, cur.quantity - q);
+            if (rem === 0) {
+              posMap.delete(o.ticker);
+            } else {
+              cur.quantity = rem;
+              cur.invested_amount = Math.round(rem * cur.avg_buy_price * 100) / 100;
+              cur.current_value = Math.round(rem * cur.current_price * 100) / 100;
+              posMap.set(o.ticker, cur);
+            }
+          }
+        } else {
+          if (posMap.has(o.ticker)) {
+            const prev = posMap.get(o.ticker);
+            const newQty = prev.quantity + q;
+            const newInvested = prev.invested_amount + val;
+            const newAvgPrice = Math.round((newInvested / newQty) * 100) / 100;
+            posMap.set(o.ticker, {
+              ...prev,
+              quantity: newQty,
+              invested_amount: newInvested,
+              avg_buy_price: newAvgPrice,
+              current_price: p,
+              current_value: newQty * p,
+              portfolio_name: "Direct Execution Basket",
+            });
+          } else {
+            posMap.set(o.ticker, {
+              ticker: o.ticker,
+              company_name: o.company_name || o.ticker.replace(".NS", ""),
+              quantity: q,
+              avg_buy_price: p,
+              current_price: p,
+              invested_amount: val,
+              current_value: val,
+              unrealized_pnl: 0,
+              unrealized_pnl_pct: 0,
+              day_change_pct: 0.5,
+              portfolio_name: "Direct Execution Basket",
+            });
+          }
+        }
+      });
+
+      // Save into storage
+      localStorage.setItem(userOrdersKey, JSON.stringify([...executedList, ...existingOrders]));
+      localStorage.setItem(userPositionsKey, JSON.stringify(Array.from(posMap.values())));
+      setActiveHoldings(Array.from(posMap.values()));
+
+      setExecutionReceipt({
+        execution_status: "FILLED",
+        broker_mode: brokerMode,
+        timestamp: formattedTime,
+        total_orders_executed: executedList.length,
+        total_traded_volume: totalTradedVal,
+        total_turnover_charges: Math.round((totalTradedVal * 0.0013) * 100) / 100,
+      });
+
+      // Re-trigger sentinel
       setTimeout(() => {
         triggerSentinelScan();
       }, 500);
@@ -200,7 +301,7 @@ export default function BrokerExecutionPage() {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Order Execution & Real-Time Performance Sentinel</h1>
           </div>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Book orders directly in-page, dispatch to Zerodha Kite / AngelOne SmartAPI, and monitor real-time constituent health every 60 seconds.
+            Book orders directly in Demat, dispatch to external apps (Zerodha, AngelOne, Groww, Upstox), and monitor health across platforms.
           </p>
         </div>
 
@@ -235,7 +336,7 @@ export default function BrokerExecutionPage() {
                 Direct Trading Desk
               </span>
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono">
-                Order Placement & Dispatch Terminal
+                Order Placement & Multi-Broker Dispatch
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -244,14 +345,14 @@ export default function BrokerExecutionPage() {
           </div>
 
           {/* Broker Selector Tabs */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-lg text-xs font-mono">
+          <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-lg text-xs font-mono gap-1">
             <button
               onClick={() => setBrokerMode("PAPER_SIMULATION")}
               className={`px-3 py-1.5 rounded-md font-bold transition-all ${
                 brokerMode === "PAPER_SIMULATION" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              Paper Simulation
+              In-App Demat
             </button>
             <button
               onClick={() => setBrokerMode("ZERODHA_KITE")}
@@ -259,7 +360,7 @@ export default function BrokerExecutionPage() {
                 brokerMode === "ZERODHA_KITE" ? "bg-white text-orange-600 shadow-xs" : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              Zerodha Kite Web
+              Zerodha Kite
             </button>
             <button
               onClick={() => setBrokerMode("ANGELONE")}
@@ -267,7 +368,23 @@ export default function BrokerExecutionPage() {
                 brokerMode === "ANGELONE" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              AngelOne SmartAPI
+              AngelOne
+            </button>
+            <button
+              onClick={() => setBrokerMode("GROWW")}
+              className={`px-3 py-1.5 rounded-md font-bold transition-all ${
+                brokerMode === "GROWW" ? "bg-white text-emerald-600 shadow-xs" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Groww
+            </button>
+            <button
+              onClick={() => setBrokerMode("UPSTOX")}
+              className={`px-3 py-1.5 rounded-md font-bold transition-all ${
+                brokerMode === "UPSTOX" ? "bg-white text-purple-600 shadow-xs" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Upstox
             </button>
           </div>
         </div>
@@ -323,16 +440,14 @@ export default function BrokerExecutionPage() {
             <span className="ml-2">Mode: <strong className="text-slate-900">{brokerMode}</strong></span>
           </div>
 
-          <div className="flex items-center gap-3">
-            {brokerMode === "PAPER_SIMULATION" && (
-              <button
-                onClick={handleDirectExecute}
-                disabled={isExecuting}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold px-6 py-2.5 rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <span>{isExecuting ? "Executing Basket..." : `⚡ Confirm & Execute ${activeOrders.length} Orders`}</span>
-              </button>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleDirectExecute}
+              disabled={isExecuting}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold px-6 py-2.5 rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <span>{isExecuting ? "Booking Orders..." : `⚡ Book ${activeOrders.length} Orders to Demat`}</span>
+            </button>
 
             {brokerMode === "ZERODHA_KITE" && (
               <div className="flex items-center gap-2">
@@ -371,6 +486,28 @@ export default function BrokerExecutionPage() {
                 </a>
               </div>
             )}
+
+            {brokerMode === "GROWW" && (
+              <a
+                href="https://groww.in/stocks"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm"
+              >
+                Trade on Groww Web ↗
+              </a>
+            )}
+
+            {brokerMode === "UPSTOX" && (
+              <a
+                href="https://upstox.com"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm"
+              >
+                Trade on Upstox Web ↗
+              </a>
+            )}
           </div>
         </div>
 
@@ -381,7 +518,12 @@ export default function BrokerExecutionPage() {
               <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
                 ✅ Execution Status: {executionReceipt.execution_status} ({executionReceipt.broker_mode})
               </span>
-              <span className="text-[11px] text-emerald-700">{executionReceipt.timestamp}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-emerald-700">{executionReceipt.timestamp}</span>
+                <Link href="/orders" className="bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold px-2.5 py-1 rounded">
+                  View Live P&L Desk →
+                </Link>
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
@@ -401,14 +543,14 @@ export default function BrokerExecutionPage() {
         )}
       </div>
 
-      {/* 2. REAL-TIME AI PERFORMANCE SENTINEL */}
+      {/* 2. REAL-TIME AI PERFORMANCE SENTINEL ACROSS PLATFORMS */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
         <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono">
-                Live Markowitz Health Sentinel & Drift Scanner
+                Live Markowitz Health Sentinel & Cross-Platform Monitor
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -416,8 +558,30 @@ export default function BrokerExecutionPage() {
             </p>
           </div>
 
-          <div className="text-xs font-mono text-slate-500">
-            Next scan in: <strong className="text-slate-900 font-bold">{secondsUntilScan}s</strong>
+          <div className="flex items-center gap-3">
+            {/* Cross-Platform Feed Selector */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg font-mono text-[11px]">
+              <span className="text-slate-400 px-1 font-bold">Feed:</span>
+              <select
+                value={platformFeed}
+                onChange={(e) => {
+                  setPlatformFeed(e.target.value);
+                  setTimeout(() => triggerSentinelScan(), 100);
+                }}
+                className="bg-white border border-slate-200 rounded px-2 py-0.5 text-xs font-semibold text-slate-800 outline-none"
+              >
+                <option value="IN_APP_DEMAT">In-App Demat Ledger</option>
+                <option value="ZERODHA">Zerodha Kite Connected</option>
+                <option value="ANGELONE">AngelOne SmartAPI</option>
+                <option value="GROWW">Groww Connected</option>
+                <option value="UPSTOX">Upstox Connected</option>
+                <option value="CAS_CSV">Imported CAS / CSV Statement</option>
+              </select>
+            </div>
+
+            <div className="text-xs font-mono text-slate-500">
+              Next scan in: <strong className="text-slate-900 font-bold">{secondsUntilScan}s</strong>
+            </div>
           </div>
         </div>
 
@@ -430,7 +594,7 @@ export default function BrokerExecutionPage() {
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
                     Health Score: {sentinelData.overall_health_score}/100
                   </span>
-                  <span className="text-[10px] text-slate-400">Last Scanned: {sentinelData.scan_time}</span>
+                  <span className="text-[10px] text-slate-400">Feed: {platformFeed} • Scanned: {sentinelData.scan_time}</span>
                 </div>
                 <p className="text-xs text-slate-200">{sentinelData.sentinel_verdict}</p>
               </div>

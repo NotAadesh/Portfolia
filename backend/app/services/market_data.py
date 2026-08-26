@@ -379,8 +379,8 @@ def get_batch_quotes(tickers: List[str]) -> Dict[str, Dict[str, Any]]:
     }
 
     try:
-        # Fast non-blocking download with strict 3-second timeout
-        data = yf.download(tickers_to_fetch, period="5d", interval="1d", progress=False, auto_adjust=False, threads=False, timeout=3)
+        # Fast download
+        data = yf.download(tickers_to_fetch, period="5d", interval="1d", progress=False, auto_adjust=False, threads=False, timeout=4)
         
         for t in tickers_to_fetch:
             try:
@@ -391,23 +391,63 @@ def get_batch_quotes(tickers: List[str]) -> Dict[str, Dict[str, Any]]:
                 vol = 0
 
                 if data is not None and not data.empty:
-                    if len(tickers_to_fetch) == 1:
-                        closes = data["Close"].dropna()
-                        highs = data["High"].dropna() if "High" in data else None
-                        lows = data["Low"].dropna() if "Low" in data else None
-                        volumes = data["Volume"].dropna() if "Volume" in data else None
+                    # Check MultiIndex vs SingleIndex columns
+                    if isinstance(data.columns, pd.MultiIndex):
+                        if ("Close", t) in data.columns:
+                            s = data[("Close", t)].dropna()
+                            if len(s) >= 1:
+                                curr_price = safe_float(s.iloc[-1])
+                                prev_close = safe_float(s.iloc[-2]) if len(s) >= 2 else curr_price
+                        if ("High", t) in data.columns:
+                            h = data[("High", t)].dropna()
+                            if len(h) >= 1:
+                                day_high = safe_float(h.iloc[-1])
+                        if ("Low", t) in data.columns:
+                            l = data[("Low", t)].dropna()
+                            if len(l) >= 1:
+                                day_low = safe_float(l.iloc[-1])
+                        if ("Volume", t) in data.columns:
+                            v = data[("Volume", t)].dropna()
+                            if len(v) >= 1:
+                                vol = int(v.iloc[-1])
                     else:
-                        closes = data["Close"][t].dropna() if "Close" in data and t in data["Close"] else pd.Series()
-                        highs = data["High"][t].dropna() if "High" in data and t in data["High"] else pd.Series()
-                        lows = data["Low"][t].dropna() if "Low" in data and t in data["Low"] else pd.Series()
-                        volumes = data["Volume"][t].dropna() if "Volume" in data and t in data["Volume"] else pd.Series()
+                        if "Close" in data:
+                            closes = data["Close"]
+                            if isinstance(closes, pd.DataFrame) and t in closes:
+                                s = closes[t].dropna()
+                                if len(s) >= 1:
+                                    curr_price = safe_float(s.iloc[-1])
+                                    prev_close = safe_float(s.iloc[-2]) if len(s) >= 2 else curr_price
+                            elif isinstance(closes, pd.Series):
+                                s = closes.dropna()
+                                if len(s) >= 1:
+                                    curr_price = safe_float(s.iloc[-1])
+                                    prev_close = safe_float(s.iloc[-2]) if len(s) >= 2 else curr_price
 
-                    if len(closes) >= 1:
-                        curr_price = safe_float(closes.iloc[-1])
-                        prev_close = safe_float(closes.iloc[-2]) if len(closes) >= 2 else curr_price
-                        day_high = safe_float(highs.iloc[-1]) if highs is not None and len(highs) >= 1 else curr_price
-                        day_low = safe_float(lows.iloc[-1]) if lows is not None and len(lows) >= 1 else curr_price
-                        vol = int(volumes.iloc[-1]) if volumes is not None and len(volumes) >= 1 else 0
+                # Fallback to direct Ticker fast_info or history if download didn't provide live price
+                if curr_price is None or curr_price == 0:
+                    try:
+                        ticker_obj = yf.Ticker(t)
+                        fast = getattr(ticker_obj, "fast_info", None)
+                        if fast:
+                            lp = getattr(fast, "last_price", 0)
+                            if lp and float(lp) > 0:
+                                curr_price = float(lp)
+                                prev_close = float(getattr(fast, "previous_close", curr_price) or curr_price)
+                                day_high = float(getattr(fast, "day_high", curr_price) or curr_price)
+                                day_low = float(getattr(fast, "day_low", curr_price) or curr_price)
+                                vol = int(getattr(fast, "last_volume", 0) or 0)
+                        
+                        if curr_price is None or curr_price == 0:
+                            hist = ticker_obj.history(period="2d")
+                            if not hist.empty and "Close" in hist:
+                                curr_price = float(hist["Close"].iloc[-1])
+                                prev_close = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else curr_price
+                                day_high = float(hist["High"].iloc[-1]) if "High" in hist else curr_price
+                                day_low = float(hist["Low"].iloc[-1]) if "Low" in hist else curr_price
+                                vol = int(hist["Volume"].iloc[-1]) if "Volume" in hist else 0
+                    except Exception as fast_err:
+                        pass
 
                 if curr_price is None or curr_price == 0:
                     base = INDIAN_MARKET_BASELINES.get(t, {"price": 1250.0, "prev": 1240.0, "high": 1265.0, "low": 1235.0})

@@ -3,10 +3,21 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { getIndianMarketStatus } from "@/lib/marketHours";
 
 export default function TaxRebalancePage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [taxData, setTaxData] = useState<any>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionSuccess, setExecutionSuccess] = useState<string | null>(null);
+
+  // External Broker Export State
+  const [copiedKite, setCopiedKite] = useState(false);
+  const [copiedAngel, setCopiedAngel] = useState(false);
+
+  const marketStatus = getIndianMarketStatus();
 
   // Default Holdings fallback if none in localStorage
   const defaultHoldings = [
@@ -54,9 +65,28 @@ export default function TaxRebalancePage() {
     let targetWeights = defaultTargetWeights;
 
     try {
-      const raw = localStorage.getItem("imported_holdings");
-      if (raw) storedHoldings = JSON.parse(raw);
-    } catch {}
+      const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
+      const livePositionsRaw = localStorage.getItem(userPositionsKey);
+      if (livePositionsRaw) {
+        const parsed = JSON.parse(livePositionsRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          storedHoldings = parsed.map((p: any) => ({
+            ticker: p.ticker,
+            company_name: p.company_name || p.ticker.replace(".NS", ""),
+            quantity: Number(p.quantity) || 1,
+            avg_buy_price: Number(p.avg_buy_price) || Number(p.current_price) || 1000,
+            current_price: Number(p.current_price) || 1000,
+            current_value: (Number(p.quantity) || 1) * (Number(p.current_price) || 1000),
+            buy_date: p.buy_date || "2024-03-01",
+          }));
+        }
+      } else {
+        const raw = localStorage.getItem("imported_holdings");
+        if (raw) storedHoldings = JSON.parse(raw);
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     try {
       const bState = localStorage.getItem("portfolio_builder_state");
@@ -100,7 +130,204 @@ export default function TaxRebalancePage() {
 
   useEffect(() => {
     runTaxOptimizer();
-  }, []);
+  }, [user]);
+
+  // Direct In-App Demat Order Booking
+  const handleExecuteTaxOrdersInApp = () => {
+    if (!taxData) return;
+    setIsExecuting(true);
+
+    try {
+      const now = new Date();
+      const formattedTime = now.toISOString().replace("T", " ").substring(0, 19);
+      const userOrdersKey = `user_${user?.id || "guest"}_order_history`;
+      const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
+      const userSavedPortfoliosKey = user ? `saved_user_portfolios_${user.id}` : "saved_user_portfolios_guest";
+
+      const existingOrders = JSON.parse(localStorage.getItem(userOrdersKey) || "[]");
+      const existingPositions = JSON.parse(localStorage.getItem(userPositionsKey) || "[]");
+
+      const posMap = new Map<string, any>();
+      existingPositions.forEach((p: any) => posMap.set(p.ticker, { ...p }));
+
+      const newOrders: any[] = [];
+      let totalRealizedGain = 0;
+
+      // 1. Process Sell Orders (Trims)
+      if (taxData.sell_orders && Array.isArray(taxData.sell_orders)) {
+        taxData.sell_orders.forEach((s: any) => {
+          const actualVal = Math.round(Number(s.quantity) * Number(s.current_price) * 100) / 100;
+          const brokerage = Math.min(20, Math.round(actualVal * 0.0003 * 100) / 100);
+          const stt = Math.round(actualVal * 0.001 * 100) / 100;
+          const orderId = `ORD-TAX-SELL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+          newOrders.push({
+            order_id: orderId,
+            ticker: s.ticker,
+            company_name: s.company_name,
+            action: "SELL",
+            quantity: Number(s.quantity),
+            executed_price: Number(s.current_price),
+            order_value: actualVal,
+            brokerage,
+            stt,
+            status: "FILLED",
+            execution_time: formattedTime,
+            broker_mode: "TAX_REBALANCE_DEMAT",
+            portfolio_name: "Tax-Aware Rebalance Basket",
+          });
+
+          totalRealizedGain += Number(s.realized_gain || 0);
+
+          if (posMap.has(s.ticker)) {
+            const current = posMap.get(s.ticker);
+            const remainingQty = Math.max(0, current.quantity - Number(s.quantity));
+            if (remainingQty === 0) {
+              posMap.delete(s.ticker);
+            } else {
+              current.quantity = remainingQty;
+              current.invested_amount = Math.round(remainingQty * current.avg_buy_price * 100) / 100;
+              current.current_value = Math.round(remainingQty * current.current_price * 100) / 100;
+              posMap.set(s.ticker, current);
+            }
+          }
+        });
+      }
+
+      // 2. Process Buy Orders (Target Frontier Allocations)
+      if (taxData.buy_orders && Array.isArray(taxData.buy_orders)) {
+        taxData.buy_orders.forEach((b: any) => {
+          const actualVal = Math.round(Number(b.quantity) * Number(b.current_price) * 100) / 100;
+          const brokerage = Math.min(20, Math.round(actualVal * 0.0003 * 100) / 100);
+          const stt = Math.round(actualVal * 0.001 * 100) / 100;
+          const orderId = `ORD-TAX-BUY-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+          newOrders.push({
+            order_id: orderId,
+            ticker: b.ticker,
+            company_name: b.company_name,
+            action: "BUY",
+            quantity: Number(b.quantity),
+            executed_price: Number(b.current_price),
+            order_value: actualVal,
+            brokerage,
+            stt,
+            status: "FILLED",
+            execution_time: formattedTime,
+            broker_mode: "TAX_REBALANCE_DEMAT",
+            portfolio_name: "Tax-Aware Rebalance Basket",
+          });
+
+          if (posMap.has(b.ticker)) {
+            const prev = posMap.get(b.ticker);
+            const newQty = prev.quantity + Number(b.quantity);
+            const newInvested = prev.invested_amount + actualVal;
+            const newAvgPrice = Math.round((newInvested / newQty) * 100) / 100;
+            posMap.set(b.ticker, {
+              ...prev,
+              quantity: newQty,
+              invested_amount: newInvested,
+              avg_buy_price: newAvgPrice,
+              current_price: Number(b.current_price),
+              current_value: newQty * Number(b.current_price),
+              portfolio_name: "Tax-Aware Rebalance Basket",
+            });
+          } else {
+            posMap.set(b.ticker, {
+              ticker: b.ticker,
+              company_name: b.company_name,
+              quantity: Number(b.quantity),
+              avg_buy_price: Number(b.current_price),
+              current_price: Number(b.current_price),
+              invested_amount: actualVal,
+              current_value: actualVal,
+              unrealized_pnl: 0,
+              unrealized_pnl_pct: 0,
+              day_change_pct: 0.5,
+              portfolio_name: "Tax-Aware Rebalance Basket",
+            });
+          }
+        });
+      }
+
+      // Persist to user storage
+      localStorage.setItem(userOrdersKey, JSON.stringify([...newOrders, ...existingOrders]));
+      localStorage.setItem(userPositionsKey, JSON.stringify(Array.from(posMap.values())));
+
+      // Auto-save portfolio
+      try {
+        const savedList = JSON.parse(localStorage.getItem(userSavedPortfoliosKey) || "[]");
+        const remainingHoldings = Array.from(posMap.values());
+        const totalVal = remainingHoldings.reduce((sum, h) => sum + (h.current_value || 0), 0);
+        const assets = remainingHoldings.map((h) => ({
+          ticker: h.ticker,
+          name: h.company_name,
+          weight: totalVal > 0 ? (h.current_value || 0) / totalVal : 0.25,
+          allocation_amount: h.current_value,
+        }));
+
+        savedList.unshift({
+          id: Date.now(),
+          name: "Tax-Rebalanced Markowitz Portfolio",
+          initial_investment: totalVal,
+          horizon_years: 3,
+          expected_return: 18.2,
+          volatility: 15.5,
+          sharpe_ratio: 0.76,
+          notes: `Rebalanced on ${formattedTime} • Net Tax: ₹${taxData?.rebalance_summary?.total_tax_bill || 0}`,
+          created_at: new Date().toISOString(),
+          assets,
+        });
+        localStorage.setItem(userSavedPortfoliosKey, JSON.stringify(savedList));
+      } catch (saveErr) {
+        console.error("Auto save tax rebalanced portfolio error:", saveErr);
+      }
+
+      setExecutionSuccess(`Successfully executed ${newOrders.length} tax-rebalancing orders directly into your Demat account!`);
+      setTimeout(() => {
+        runTaxOptimizer();
+      }, 500);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to book orders in Demat account.");
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const copyKiteJSON = () => {
+    const allOrders = [...(taxData?.sell_orders || []), ...(taxData?.buy_orders || [])];
+    const kitePayload = allOrders.map((o) => ({
+      variety: "regular",
+      tradingsymbol: o.ticker.replace(".NS", ""),
+      exchange: "NSE",
+      transaction_type: o.action || (taxData?.sell_orders?.includes(o) ? "SELL" : "BUY"),
+      order_type: "MARKET",
+      quantity: o.quantity,
+      product: "CNC",
+    }));
+    navigator.clipboard.writeText(JSON.stringify(kitePayload, null, 2));
+    setCopiedKite(true);
+    setTimeout(() => setCopiedKite(false), 2500);
+  };
+
+  const copyAngelJSON = () => {
+    const allOrders = [...(taxData?.sell_orders || []), ...(taxData?.buy_orders || [])];
+    const angelPayload = allOrders.map((o) => ({
+      variety: "NORMAL",
+      tradingsymbol: `${o.ticker.replace(".NS", "")}-EQ`,
+      symboltoken: "9999",
+      transactiontype: o.action || (taxData?.sell_orders?.includes(o) ? "SELL" : "BUY"),
+      exchange: "NSE",
+      ordertype: "MARKET",
+      producttype: "DELIVERY",
+      duration: "DAY",
+      quantity: String(o.quantity),
+    }));
+    navigator.clipboard.writeText(JSON.stringify(angelPayload, null, 2));
+    setCopiedAngel(true);
+    setTimeout(() => setCopiedAngel(false), 2500);
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-16">
@@ -118,13 +345,39 @@ export default function TaxRebalancePage() {
           </p>
         </div>
 
-        <Link
-          href="/execute"
-          className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition-colors shadow-sm"
-        >
-          Proceed to Order Execution →
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleExecuteTaxOrdersInApp}
+            disabled={isExecuting || !taxData}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold font-mono px-5 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <span>{isExecuting ? "Booking Orders..." : "⚡ Book Tax Rebalance Orders (In-App Demat)"}</span>
+          </button>
+
+          <Link
+            href="/orders"
+            className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm font-mono"
+          >
+            View Live Demat P&L →
+          </Link>
+        </div>
       </div>
+
+      {/* Execution Success Alert */}
+      {executionSuccess && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex flex-wrap justify-between items-center gap-3 animate-in fade-in duration-200 font-mono text-xs">
+          <div className="flex items-center gap-2 text-emerald-900">
+            <span>✅</span>
+            <span className="font-bold">{executionSuccess}</span>
+          </div>
+          <Link
+            href="/orders"
+            className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-lg font-bold transition-colors"
+          >
+            View Live in Orders & P&L Desk →
+          </Link>
+        </div>
+      )}
 
       {/* TAX SUMMARY CARDS */}
       {taxData?.rebalance_summary && (
@@ -166,6 +419,54 @@ export default function TaxRebalancePage() {
           </div>
         </div>
       )}
+
+      {/* EXTERNAL BROKER DIRECT DISPATCH BAR */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">External Broker Dispatch</span>
+          <h3 className="text-sm font-bold text-slate-900 mt-0.5">Export Rebalance Baskets to External Apps</h3>
+          <p className="text-xs text-slate-500 mt-0.5">1-click order payloads formatted for Zerodha, AngelOne, Groww, and Upstox.</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={copyKiteJSON}
+            className="bg-[#ff5722] hover:bg-[#f4511e] text-white font-mono text-xs font-semibold px-3 py-2 rounded-lg shadow-xs"
+          >
+            {copiedKite ? "Copied Kite JSON!" : "Kite Basket"}
+          </button>
+          <a
+            href="https://kite.zerodha.com"
+            target="_blank"
+            rel="noreferrer"
+            className="bg-slate-900 hover:bg-slate-800 text-white font-mono text-xs font-semibold px-3 py-2 rounded-lg shadow-xs"
+          >
+            Kite Web ↗
+          </a>
+          <button
+            onClick={copyAngelJSON}
+            className="bg-blue-700 hover:bg-blue-800 text-white font-mono text-xs font-semibold px-3 py-2 rounded-lg shadow-xs"
+          >
+            {copiedAngel ? "Copied Angel JSON!" : "AngelOne Batch"}
+          </button>
+          <a
+            href="https://groww.in/stocks"
+            target="_blank"
+            rel="noreferrer"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-semibold px-3 py-2 rounded-lg shadow-xs"
+          >
+            Groww Web ↗
+          </a>
+          <a
+            href="https://upstox.com"
+            target="_blank"
+            rel="noreferrer"
+            className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-xs font-semibold px-3 py-2 rounded-lg shadow-xs"
+          >
+            Upstox Web ↗
+          </a>
+        </div>
+      </div>
 
       {/* AI TAX HARVESTING & STRATEGY SYNTHESIS */}
       {taxData?.ai_insights && (
@@ -335,16 +636,25 @@ export default function TaxRebalancePage() {
         <div>
           <h4 className="text-sm font-bold text-white">Ready to place these tax-optimized rebalance orders?</h4>
           <p className="text-xs text-slate-400 mt-0.5">
-            Export directly to 1-Click Zerodha Kite Connect Baskets or AngelOne SmartAPI.
+            Book directly into your In-App Demat account or dispatch to external broker desks.
           </p>
         </div>
 
-        <Link
-          href="/execute"
-          className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-6 py-2.5 rounded-lg transition-colors shadow-sm"
-        >
-          Open Broker Execution Terminal →
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExecuteTaxOrdersInApp}
+            disabled={isExecuting || !taxData}
+            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-mono text-xs font-bold px-5 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+          >
+            ⚡ Book Orders in Demat Account
+          </button>
+          <Link
+            href="/execute"
+            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-6 py-2.5 rounded-lg transition-colors shadow-sm"
+          >
+            Open Broker Execution Terminal →
+          </Link>
+        </div>
       </div>
     </div>
   );

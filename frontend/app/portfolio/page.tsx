@@ -9,6 +9,7 @@ import AuthTeaserGate from "@/components/AuthTeaserGate";
 import AIPortfolioInsights, { PortfolioInsightsData } from "@/components/AIPortfolioInsights";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
+import { getIndianMarketStatus } from "@/lib/marketHours";
 
 export default function Portfolio() {
   const router = useRouter();
@@ -307,6 +308,56 @@ export default function Portfolio() {
     }
   };
 
+  const [stagingWeightMode, setStagingWeightMode] = useState<"OPTIMAL" | "EQUAL">("OPTIMAL");
+  const [cachedPriceMap, setCachedPriceMap] = useState<Record<string, number>>({});
+
+  // Recalculate Staged Allocation between Optimal vs Equal Split
+  const handleSwitchWeightSplit = (mode: "OPTIMAL" | "EQUAL") => {
+    setStagingWeightMode(mode);
+    const totalCap = Number(investment) || 100000;
+    const tickers = Object.keys(result?.optimal_weights || {});
+    if (tickers.length === 0) return;
+
+    const staged: any[] = [];
+    if (mode === "OPTIMAL") {
+      Object.entries(result.optimal_weights).forEach(([ticker, weight]: any) => {
+        const wPct = Number(weight) / 100;
+        if (wPct <= 0) return;
+        const alloc = Math.round(totalCap * wPct);
+        const ltp = cachedPriceMap[ticker] || 1500;
+        const qty = Math.max(1, Math.floor(alloc / ltp));
+        const foundName = selected.find((s) => s.ticker === ticker)?.name || ticker.replace(".NS", "");
+
+        staged.push({
+          ticker,
+          company_name: foundName,
+          action: "BUY",
+          quantity: qty,
+          price: ltp,
+          weight_pct: Math.round(wPct * 100),
+        });
+      });
+    } else {
+      const equalWeight = 1.0 / tickers.length;
+      tickers.forEach((ticker) => {
+        const alloc = Math.round(totalCap * equalWeight);
+        const ltp = cachedPriceMap[ticker] || 1500;
+        const qty = Math.max(1, Math.floor(alloc / ltp));
+        const foundName = selected.find((s) => s.ticker === ticker)?.name || ticker.replace(".NS", "");
+
+        staged.push({
+          ticker,
+          company_name: foundName,
+          action: "BUY",
+          quantity: qty,
+          price: ltp,
+          weight_pct: Math.round(equalWeight * 100),
+        });
+      });
+    }
+    setStagedOrders(staged);
+  };
+
   // Open Staging & Review Modal with Live Market Prices
   const handleDeployDirectOrders = async () => {
     if (!result?.optimal_weights) return;
@@ -351,6 +402,9 @@ export default function Portfolio() {
       console.warn("Live quote fetch for order staging fallback:", e);
     }
 
+    setCachedPriceMap(priceMap);
+    setStagingWeightMode("OPTIMAL");
+
     const staged: any[] = [];
     Object.entries(result.optimal_weights).forEach(([ticker, weight]: any) => {
       const wPct = Number(weight) / 100;
@@ -377,8 +431,14 @@ export default function Portfolio() {
 
   // Confirm Staged Orders
   const handleConfirmAndExecuteOrders = () => {
+    const market = getIndianMarketStatus();
+    if (!market.isOpen) {
+      alert(`Market is currently closed! Demat orders can only be executed during live NSE/BSE trading hours (Monday to Friday, 09:15 AM to 03:30 PM IST).\nCurrent time: ${market.currentTimeIST}`);
+      return;
+    }
     const now = new Date();
     const formattedTime = now.toISOString().replace("T", " ").substring(0, 19);
+    const activeBasketName = portfolioName || `Markowitz Portfolio (${selected.slice(0, 3).map((s) => s.ticker.replace(".NS", "")).join(", ")})`;
 
     const newOrders: any[] = [];
     const newPositions: any[] = [];
@@ -402,6 +462,7 @@ export default function Portfolio() {
         status: "FILLED",
         execution_time: formattedTime,
         broker_mode: "PORTFOLIO_STUDIO_CONFIRMED",
+        portfolio_name: activeBasketName,
       });
 
       newPositions.push({
@@ -415,12 +476,14 @@ export default function Portfolio() {
         unrealized_pnl: 0,
         unrealized_pnl_pct: 0,
         day_change_pct: 0.8,
+        portfolio_name: activeBasketName,
       });
     });
 
     try {
       const userOrdersKey = `user_${user?.id || "guest"}_order_history`;
       const userPositionsKey = `user_${user?.id || "guest"}_active_positions`;
+      const userSavedPortfoliosKey = user ? `saved_user_portfolios_${user.id}` : "saved_user_portfolios_guest";
 
       const existingOrders = JSON.parse(localStorage.getItem(userOrdersKey) || "[]");
       localStorage.setItem(userOrdersKey, JSON.stringify([...newOrders, ...existingOrders]));
@@ -442,6 +505,7 @@ export default function Portfolio() {
             invested_amount: newInvested,
             avg_buy_price: newAvgPrice,
             current_value: newQty * p.current_price,
+            portfolio_name: activeBasketName,
           });
         } else {
           mergedMap.set(p.ticker, p);
@@ -449,6 +513,34 @@ export default function Portfolio() {
       });
 
       localStorage.setItem(userPositionsKey, JSON.stringify(Array.from(mergedMap.values())));
+
+      // Auto-save basket in Saved Portfolios
+      try {
+        const savedList: any[] = JSON.parse(localStorage.getItem(userSavedPortfoliosKey) || "[]");
+        const assets = stagedOrders.map((o) => ({
+          ticker: o.ticker,
+          name: o.company_name,
+          weight: (o.weight_pct || 25) / 100,
+          allocation_amount: Number(o.quantity) * Number(o.price),
+        }));
+
+        const totalPortfolioVal = stagedOrders.reduce((acc, o) => acc + (Number(o.quantity) * Number(o.price)), 0);
+        savedList.unshift({
+          id: Date.now(),
+          name: activeBasketName,
+          initial_investment: totalPortfolioVal,
+          horizon_years: Number(years) || 3,
+          expected_return: result?.expected_return || 17.5,
+          volatility: result?.volatility || 16.0,
+          sharpe_ratio: result?.sharpe_ratio || 0.72,
+          notes: `Split Mode: ${stagingWeightMode} • Generated in Portfolio Studio`,
+          created_at: new Date().toISOString(),
+          assets,
+        });
+        localStorage.setItem(userSavedPortfoliosKey, JSON.stringify(savedList));
+      } catch (saveErr) {
+        console.error("Auto save portfolio error:", saveErr);
+      }
 
       // Automatically save this executed portfolio in Saved Portfolios
       try {
@@ -1089,6 +1181,35 @@ export default function Portfolio() {
               </div>
 
 
+              {/* Weight Split Mode Selector */}
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                <span className="text-xs font-mono font-bold text-slate-700">Weight Allocation Strategy:</span>
+                <div className="flex items-center gap-1.5 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWeightSplit("OPTIMAL")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      stagingWeightMode === "OPTIMAL"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    🎯 Optimal Markowitz Split
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWeightSplit("EQUAL")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      stagingWeightMode === "EQUAL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    ⚖️ Equal Split (1/N)
+                  </button>
+                </div>
+              </div>
+
               {/* Order Staging Table */}
               <div className="space-y-3">
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1124,8 +1245,16 @@ export default function Portfolio() {
                                 value={o.quantity}
                                 onChange={(e) => {
                                   const updated = [...stagedOrders];
-                                  updated[idx].quantity = Math.max(1, Number(e.target.value));
+                                  const val = e.target.value;
+                                  updated[idx].quantity = val === "" ? ("" as any) : Number(val);
                                   setStagedOrders(updated);
+                                }}
+                                onBlur={() => {
+                                  const updated = [...stagedOrders];
+                                  if (!updated[idx].quantity || Number(updated[idx].quantity) <= 0) {
+                                    updated[idx].quantity = 1;
+                                    setStagedOrders(updated);
+                                  }
                                 }}
                                 className="w-20 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
                               />
@@ -1137,8 +1266,16 @@ export default function Portfolio() {
                                 value={o.price}
                                 onChange={(e) => {
                                   const updated = [...stagedOrders];
-                                  updated[idx].price = Number(e.target.value);
+                                  const val = e.target.value;
+                                  updated[idx].price = val === "" ? ("" as any) : Number(val);
                                   setStagedOrders(updated);
+                                }}
+                                onBlur={() => {
+                                  const updated = [...stagedOrders];
+                                  if (!updated[idx].price || Number(updated[idx].price) <= 0) {
+                                    updated[idx].price = 1;
+                                    setStagedOrders(updated);
+                                  }
                                 }}
                                 className="w-24 border border-slate-200 px-2 py-1 rounded text-xs outline-none focus:border-slate-800 font-mono"
                               />

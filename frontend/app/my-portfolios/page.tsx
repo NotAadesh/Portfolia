@@ -450,9 +450,9 @@ export default function MyPortfoliosPage() {
                 <div className="space-y-2">
                   <span className="text-[11px] font-semibold text-slate-700 block uppercase tracking-wider">Asset Allocation:</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {p.assets.map((a) => (
+                    {p.assets.map((a, aIdx) => (
                       <div
-                        key={a.id}
+                        key={a.id || a.ticker || `${aIdx}-${a.ticker || 'asset'}`}
                         className="text-xs bg-slate-50 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1.5"
                       >
                         <span className="font-mono font-medium text-slate-900">{a.ticker}</span>
