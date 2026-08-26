@@ -23,9 +23,11 @@ function TopNavbar() {
         {/* Brand & Market Sentinel */}
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2.5 text-decoration-none">
-            <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center font-bold text-xs text-white tracking-tight">
-              P
-            </div>
+            <img
+              src="/logo.png"
+              alt="Portfolia Logo"
+              className="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-700/50"
+            />
             <div>
               <span className="font-bold text-sm text-white tracking-tight uppercase">Portfolia</span>
               <span className="ml-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider">

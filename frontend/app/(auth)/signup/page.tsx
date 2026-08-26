@@ -48,9 +48,11 @@ export default function SignupPage() {
     <div className="min-h-[80vh] flex items-center justify-center">
       <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 w-full max-w-sm space-y-6">
         <div className="text-center space-y-1.5">
-          <div className="inline-flex w-8 h-8 bg-slate-900 text-white rounded-md items-center justify-center font-bold text-xs mb-1">
-            P
-          </div>
+          <img
+            src="/logo.png"
+            alt="Portfolia Logo"
+            className="w-12 h-12 rounded-xl object-cover shadow-sm mx-auto mb-1 border border-slate-100"
+          />
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Create Portfolia Account</h1>
           <p className="text-xs text-slate-500">
             Access quantitative allocation and portfolio persistence
