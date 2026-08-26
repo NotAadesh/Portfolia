@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 from app.db.session import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.email import generate_otp, send_otp_verification_email
