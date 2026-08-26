@@ -367,7 +367,8 @@ export default function OrdersAndPnLPage() {
           setLiveLTP(ltp);
           setOrderPrice(ltp);
           if (orderInputMode === "AMOUNT") {
-            const calculatedQty = Math.max(1, Math.floor(customInvestAmount / ltp));
+            const numAmount = Number(customInvestAmount) || 0;
+            const calculatedQty = Math.max(1, Math.floor(numAmount / ltp));
             setOrderQuantity(calculatedQty);
           }
         }
@@ -447,7 +448,8 @@ export default function OrdersAndPnLPage() {
       return;
     }
     if (!user || !sellingPosition) return;
-    const sellQty = Math.min(sellingPosition.quantity, Math.max(1, quickSellQuantity));
+    const numSellQty = Number(quickSellQuantity) || 1;
+    const sellQty = Math.min(sellingPosition.quantity, Math.max(1, numSellQty));
     const price = Number(quickSellPrice) || sellingPosition.current_price;
     const orderValue = Math.round(sellQty * price * 100) / 100;
     const brokerage = Math.min(20, Math.round(orderValue * 0.0003 * 100) / 100);
@@ -536,11 +538,12 @@ export default function OrdersAndPnLPage() {
       alert("Please sign in to place live demat orders.");
       return;
     }
-    if (orderQuantity <= 0 || orderPrice <= 0) return;
+    const numQty = Number(orderQuantity) || 0;
+    if (numQty <= 0 || orderPrice <= 0) return;
 
     setIsPlacing(true);
     const execPrice = liveLTP || orderPrice || 1000;
-    const orderValue = Math.round(orderQuantity * execPrice * 100) / 100;
+    const orderValue = Math.round(numQty * execPrice * 100) / 100;
     const brokerage = Math.min(20, Math.round(orderValue * 0.0003 * 100) / 100);
     const stt = Math.round(orderValue * 0.001 * 100) / 100;
     const now = new Date();
@@ -1165,7 +1168,8 @@ export default function OrdersAndPnLPage() {
                   onClick={() => {
                     setOrderInputMode("AMOUNT");
                     const p = liveLTP || orderPrice || 1000;
-                    setOrderQuantity(Math.max(1, Math.floor(customInvestAmount / p)));
+                    const numAmt = Number(customInvestAmount) || 0;
+                    setOrderQuantity(Math.max(1, Math.floor(numAmt / p)));
                   }}
                   className={`py-1.5 rounded-lg font-bold transition-all ${
                     orderInputMode === "AMOUNT"
@@ -1299,12 +1303,12 @@ export default function OrdersAndPnLPage() {
                 <div className="flex justify-between">
                   <span>Gross Order Value:</span>
                   <span className="font-bold text-slate-900">
-                    ₹{(orderQuantity * liveLTP).toLocaleString()}
+                    ₹{((Number(orderQuantity) || 0) * liveLTP).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400">
                   <span>Est. Brokerage & STT (0.1%):</span>
-                  <span>₹{((orderQuantity * liveLTP) * 0.0013).toFixed(2)}</span>
+                  <span>₹{(((Number(orderQuantity) || 0) * liveLTP) * 0.0013).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1657,8 +1661,9 @@ export default function OrdersAndPnLPage() {
 
             {/* Estimated Financial Realization */}
             {(() => {
-              const grossVal = Math.round(quickSellQuantity * quickSellPrice * 100) / 100;
-              const costBasis = quickSellQuantity * sellingPosition.avg_buy_price;
+              const numQty = Number(quickSellQuantity) || 0;
+              const grossVal = Math.round(numQty * quickSellPrice * 100) / 100;
+              const costBasis = numQty * sellingPosition.avg_buy_price;
               const realizedGainLoss = Math.round((grossVal - costBasis) * 100) / 100;
               const isProfit = realizedGainLoss >= 0;
 
