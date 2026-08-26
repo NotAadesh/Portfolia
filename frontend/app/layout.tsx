@@ -26,7 +26,8 @@ function TopNavbar() {
             <img
               src="/logo.png"
               alt="Portfolia Logo"
-              className="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-700/50"
+              style={{ width: "32px", height: "32px", minWidth: "32px", minHeight: "32px", flexShrink: 0 }}
+              className="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-700/50 shrink-0"
             />
             <div>
               <span className="font-bold text-sm text-white tracking-tight uppercase">Portfolia</span>

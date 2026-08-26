@@ -107,7 +107,12 @@ export default function AICopilotDrawer({
         className="px-5 py-3.5 flex justify-between items-center border-b border-slate-800"
       >
         <div className="flex items-center gap-2.5">
-          <img src="/logo.png" alt="Portfolia Logo" className="w-5 h-5 rounded object-cover shadow-xs border border-slate-700" />
+          <img
+            src="/logo.png"
+            alt="Portfolia Logo"
+            style={{ width: "24px", height: "24px", minWidth: "24px", minHeight: "24px", flexShrink: 0 }}
+            className="w-6 h-6 rounded object-cover shadow-xs border border-slate-700 shrink-0"
+          />
           <div>
             <h3 style={{ color: "#f8fafc" }} className="font-bold text-xs uppercase tracking-wider">
               Financial Copilot
