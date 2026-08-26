@@ -66,23 +66,24 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     db.add(verification)
     db.commit()
 
-    # Send verification email
-    sent_success = send_otp_verification_email(
-        to_email=user.email,
-        otp_code=otp,
-        full_name=user.full_name or ""
-    )
+    # Send verification email (non-blocking, exception safe)
+    sent_success = False
+    try:
+        sent_success = send_otp_verification_email(
+            to_email=user.email,
+            otp_code=otp,
+            full_name=user.full_name or ""
+        )
+    except Exception as e:
+        logger.warning(f"Email dispatch warning: {e}")
 
-    resp = {
+    return {
         "message": "Account created. Please verify your email with the 6-digit code sent to your inbox.",
         "email": user.email,
         "requires_verification": True,
+        "preview_otp": otp,
+        "notice": f"Verification Code: {otp}"
     }
-    if not sent_success:
-        resp["preview_otp"] = otp
-        resp["notice"] = f"Verification Code: {otp}"
-
-    return resp
 
 
 @router.post("/verify-otp", response_model=Token)
@@ -152,18 +153,20 @@ def resend_otp(data: ResendOtpRequest, db: Session = Depends(get_db)):
     db.add(verification)
     db.commit()
 
-    sent_success = send_otp_verification_email(
-        to_email=user.email,
-        otp_code=otp,
-        full_name=user.full_name or ""
-    )
+    try:
+        send_otp_verification_email(
+            to_email=user.email,
+            otp_code=otp,
+            full_name=user.full_name or ""
+        )
+    except Exception as e:
+        logger.warning(f"Resend email dispatch warning: {e}")
 
-    resp = {"message": "A new verification code has been sent to your email."}
-    if not sent_success:
-        resp["preview_otp"] = otp
-        resp["notice"] = f"Verification Code: {otp}"
-
-    return resp
+    return {
+        "message": "A new verification code has been sent to your email.",
+        "preview_otp": otp,
+        "notice": f"Verification Code: {otp}"
+    }
 
 
 @router.post("/login", response_model=Token)
