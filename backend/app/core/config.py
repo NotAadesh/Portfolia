@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     SMTP_USER: str = os.getenv("SMTP_USER", "portfolia.yourportfoliomanager@gmail.com")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     EMAILS_FROM_NAME: str = os.getenv("EMAILS_FROM_NAME", "Portfolia")
-    EMAILS_FROM_EMAIL: str = os.getenv("EMAILS_FROM_EMAIL", "portfolia.yourportfoliomanager@gmail.com")
-    
+    # Resend HTTPS API (Port 443 - Cloud & Render Recommended)
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    RESEND_FROM_EMAIL: str = os.getenv("RESEND_FROM_EMAIL", "Portfolia <onboarding@resend.dev>")
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
     

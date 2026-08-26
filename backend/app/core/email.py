@@ -15,10 +15,50 @@ def generate_otp(length: int = 6) -> str:
     return "".join(random.choices(string.digits, k=length))
 
 
+import requests
+
+def send_email_resend_http(to_email: str, subject: str, html_content: str, text_content: str = "") -> bool:
+    """
+    Send email via Resend HTTPS REST API (Port 443).
+    Bypasses cloud SMTP blocks completely.
+    """
+    if not settings.RESEND_API_KEY:
+        return False
+
+    try:
+        url = "https://api.resend.com/emails"
+        headers = {
+            "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "from": settings.RESEND_FROM_EMAIL or "Portfolia <onboarding@resend.dev>",
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content,
+            "text": text_content,
+        }
+        resp = requests.post(url, json=payload, headers=headers, timeout=6)
+        if resp.status_code in [200, 201]:
+            logger.info(f"✅ Successfully sent email to {to_email} via Resend HTTPS REST API (ID: {resp.json().get('id')})")
+            return True
+        else:
+            logger.warning(f"Resend HTTPS API returned status {resp.status_code}: {resp.text}")
+            return False
+    except Exception as e:
+        logger.warning(f"Failed to send email via Resend HTTPS API: {e}")
+        return False
+
+
 def send_email_smtp(to_email: str, subject: str, html_content: str, text_content: str = "") -> bool:
     """
-    Send an email via standard SMTP with dual-mode support (SSL 465 & STARTTLS 587).
+    Send an email via Resend HTTPS API (Primary) with fallback to standard SMTP.
     """
+    # 1. Primary: Try Resend HTTPS API (Port 443)
+    if settings.RESEND_API_KEY:
+        if send_email_resend_http(to_email, subject, html_content, text_content):
+            return True
+
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         logger.warning(
             f"\n[DEV MODE] SMTP not configured. Simulated email to: {to_email}\n"
