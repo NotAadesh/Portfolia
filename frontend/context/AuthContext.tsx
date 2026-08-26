@@ -18,9 +18,9 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, fullName?: string) => Promise<{ requiresVerification: boolean; email: string }>;
+  signup: (email: string, password: string, fullName?: string) => Promise<{ requiresVerification: boolean; email: string; previewOtp?: string }>;
   verifyOtp: (email: string, otpCode: string) => Promise<void>;
-  resendOtp: (email: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<any>;
   logout: () => void;
 }
 
