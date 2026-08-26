@@ -10,25 +10,27 @@ function VerifyContent() {
   const searchParams = useSearchParams();
   const { verifyOtp, resendOtp } = useAuth();
 
+  const urlOtp = searchParams.get("otp") || "";
   const [email, setEmail] = useState(searchParams.get("email") || "");
-  const [otpCode, setOtpCode] = useState("");
+  const [otpCode, setOtpCode] = useState(urlOtp);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(60);
 
-  const [previewOtp, setPreviewOtp] = useState<string | null>(null);
+  const [previewOtp, setPreviewOtp] = useState<string | null>(urlOtp || null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = sessionStorage.getItem("last_preview_otp");
-      if (stored) {
-        setPreviewOtp(stored);
-        if (!otpCode) setOtpCode(stored);
+      const active = urlOtp || stored;
+      if (active) {
+        setPreviewOtp(active);
+        setOtpCode(active);
       }
     }
-  }, []);
+  }, [urlOtp]);
 
   useEffect(() => {
     let timer: any;

@@ -41,7 +41,7 @@ def send_email_smtp(to_email: str, subject: str, html_content: str, text_content
 
     # Attempt 1: Direct SSL on Port 465 (Cloud & Render preferred)
     try:
-        with smtplib.SMTP_SSL(settings.SMTP_SERVER, 465, timeout=12) as server:
+        with smtplib.SMTP_SSL(settings.SMTP_SERVER, 465, timeout=3) as server:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.sendmail(settings.EMAILS_FROM_EMAIL, to_email, msg.as_string())
         logger.info(f"Successfully sent verification email to {to_email} via Port 465 SSL")
@@ -51,7 +51,7 @@ def send_email_smtp(to_email: str, subject: str, html_content: str, text_content
 
     # Attempt 2: STARTTLS on Port 587
     try:
-        with smtplib.SMTP(settings.SMTP_SERVER, 587, timeout=12) as server:
+        with smtplib.SMTP(settings.SMTP_SERVER, 587, timeout=3) as server:
             server.starttls()
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.sendmail(settings.EMAILS_FROM_EMAIL, to_email, msg.as_string())

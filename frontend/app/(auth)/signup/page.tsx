@@ -33,7 +33,8 @@ export default function SignupPage() {
     try {
       const res = await signup(email, password, fullName);
       if (res.requiresVerification) {
-        router.push(`/verify?email=${encodeURIComponent(email)}`);
+        const otpParam = res.previewOtp ? `&otp=${encodeURIComponent(res.previewOtp)}` : "";
+        router.push(`/verify?email=${encodeURIComponent(email)}${otpParam}`);
       } else {
         router.push("/");
       }
